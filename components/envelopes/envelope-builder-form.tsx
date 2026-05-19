@@ -9,6 +9,7 @@ import { mapApiErrorMessage } from "@/lib/client/error-messages";
 import {
   FIELD_MIN_HEIGHT_PERCENT,
   FIELD_MIN_WIDTH_PERCENT,
+  normalizeFieldGeometry,
 } from "@/lib/envelopes/field-dimensions";
 import { uiControlClass, uiPrimaryButtonClass, uiSecondaryButtonSmClass } from "@/lib/ui/classes";
 import { useToast } from "@/components/ui/toast-provider";
@@ -345,7 +346,18 @@ export function EnvelopeBuilderForm({
     }
     setFieldSaveIndicator("edited");
     applyFieldMutation((current) =>
-      current.map((entry, index) => (index === selectedFieldIndex ? { ...entry, ...patch } : entry)),
+      current.map((entry, index) => {
+        if (index !== selectedFieldIndex) {
+          return entry;
+        }
+        const merged = { ...entry, ...patch };
+        const touchesGeometry =
+          patch.x !== undefined ||
+          patch.y !== undefined ||
+          patch.width !== undefined ||
+          patch.height !== undefined;
+        return touchesGeometry ? normalizeFieldGeometry(merged) : merged;
+      }),
     );
   };
 
@@ -509,21 +521,11 @@ export function EnvelopeBuilderForm({
       }
     }
 
-    const normalizedPayloadFields = payloadFields.map((field) => {
-      const width = Math.max(FIELD_MIN_WIDTH_PERCENT, Number(field.width) || FIELD_MIN_WIDTH_PERCENT);
-      const height = Math.max(FIELD_MIN_HEIGHT_PERCENT, Number(field.height) || FIELD_MIN_HEIGHT_PERCENT);
-      const x = Math.max(0, Math.min(Number(field.x) || 0, 100 - width));
-      const y = Math.max(0, Math.min(Number(field.y) || 0, 100 - height));
-      return {
-        ...field,
-        signerEmail: field.signerEmail.trim(),
-        width: Number(width.toFixed(2)),
-        height: Number(height.toFixed(2)),
-        x: Number(x.toFixed(2)),
-        y: Number(y.toFixed(2)),
-        zIndex: Math.max(1, Math.round(Number(field.zIndex) || 1)),
-      };
-    });
+    const normalizedPayloadFields = payloadFields.map((field) => ({
+      ...normalizeFieldGeometry(field),
+      signerEmail: field.signerEmail.trim(),
+      zIndex: Math.max(1, Math.round(Number(field.zIndex) || 1)),
+    }));
 
     const senderEmailNorm = senderEmail.trim().toLowerCase();
     const recipientSigners = signers.map((signer, index) => ({
@@ -609,8 +611,7 @@ export function EnvelopeBuilderForm({
     }
   };
 
-  const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const requestCreateEnvelope = async () => {
     if (!senderWillSignBeforeSending) {
       await submitEnvelope();
       return;
@@ -622,6 +623,10 @@ export function EnvelopeBuilderForm({
     }
 
     await submitEnvelope();
+  };
+
+  const onSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
   };
 
   const copySigningLink = async () => {
@@ -950,8 +955,8 @@ export function EnvelopeBuilderForm({
         </div>
       )}
 
-      {!createdEnvelope ? (
-        <div className={`space-y-6 ${step === 1 ? "" : "hidden"}`}>
+      {!createdEnvelope && step === 1 ? (
+        <div className="space-y-6">
           <div className="space-y-3 rounded-2xl border border-border bg-surface p-6 shadow-sm">
             <p className="text-sm font-semibold text-text">Document Source</p>
             <p className="text-xs text-muted">Choose an existing document or upload PDF or Word (.docx, .doc).</p>
@@ -1073,8 +1078,9 @@ export function EnvelopeBuilderForm({
         </div>
       ) : null}
 
-      <div className={`space-y-6 rounded-2xl border border-border bg-surface p-6 shadow-sm ${step === 2 && !createdEnvelope ? "" : "hidden"}`}>
-        <div className="flex flex-wrap items-end justify-between gap-4">
+      {step === 2 && !createdEnvelope ? (
+        <div className="space-y-6 rounded-2xl border border-border bg-surface p-6 shadow-sm">
+          <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="text-label uppercase">Recipients</p>
             <p className="text-sm text-body">Add recipients in order. Drag cards to reorder.</p>
@@ -1222,9 +1228,11 @@ export function EnvelopeBuilderForm({
             );
           })}
         </div>
-      </div>
+        </div>
+      ) : null}
 
-      <div className={`space-y-6 ${step === 3 && !createdEnvelope ? "" : "hidden"}`}>
+      {step === 3 && !createdEnvelope ? (
+      <div className="space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <p className="text-label uppercase">Place fields</p>
@@ -1350,7 +1358,9 @@ export function EnvelopeBuilderForm({
                 }
                 onUpdateField={(index, updatedField) =>
                   setFields((current) =>
-                    current.map((entry, currentIndex) => (currentIndex === index ? updatedField : entry)),
+                    current.map((entry, currentIndex) =>
+                      currentIndex === index ? normalizeFieldGeometry(updatedField) : entry,
+                    ),
                   )
                 }
                 onDeleteField={(index) =>
@@ -1636,10 +1646,8 @@ export function EnvelopeBuilderForm({
                       <label className="text-[11px] text-body">
                         X
                         <input
-                          type="number"
-                          step={0.01}
-                          min={0}
-                          max={100 - (selectedField.width ?? FIELD_MIN_WIDTH_PERCENT)}
+                          type="text"
+                          inputMode="decimal"
                           value={selectedField.x}
                           onChange={(event) => {
                             const x = Math.max(0, Math.min(Number(event.target.value) || 0, 100 - selectedField.width));
@@ -1651,10 +1659,8 @@ export function EnvelopeBuilderForm({
                       <label className="text-[11px] text-body">
                         Y
                         <input
-                          type="number"
-                          step={0.01}
-                          min={0}
-                          max={100 - (selectedField.height ?? FIELD_MIN_HEIGHT_PERCENT)}
+                          type="text"
+                          inputMode="decimal"
                           value={selectedField.y}
                           onChange={(event) => {
                             const y = Math.max(0, Math.min(Number(event.target.value) || 0, 100 - selectedField.height));
@@ -1666,10 +1672,8 @@ export function EnvelopeBuilderForm({
                       <label className="text-[11px] text-body">
                         Width
                         <input
-                          type="number"
-                          step={0.01}
-                          min={FIELD_MIN_WIDTH_PERCENT}
-                          max={100 - selectedField.x}
+                          type="text"
+                          inputMode="decimal"
                           value={selectedField.width}
                           onChange={(event) => {
                             const w = Math.max(
@@ -1684,10 +1688,8 @@ export function EnvelopeBuilderForm({
                       <label className="text-[11px] text-body">
                         Height
                         <input
-                          type="number"
-                          step={0.01}
-                          min={FIELD_MIN_HEIGHT_PERCENT}
-                          max={100 - selectedField.y}
+                          type="text"
+                          inputMode="decimal"
                           value={selectedField.height}
                           onChange={(event) => {
                             const h = Math.max(
@@ -1728,8 +1730,10 @@ export function EnvelopeBuilderForm({
           </div>
         </div>
       </div>
+      ) : null}
 
-      <div className={`${step === 4 && !createdEnvelope ? "" : "hidden"} space-y-6 rounded-2xl border border-border bg-surface p-6 shadow-sm`}>
+      {step === 4 && !createdEnvelope ? (
+      <div className="space-y-6 rounded-2xl border border-border bg-surface p-6 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="text-label uppercase">Review</p>
@@ -1800,6 +1804,7 @@ export function EnvelopeBuilderForm({
         </div>
 
       </div>
+      ) : null}
 
       <div className={`flex flex-wrap items-center gap-3 ${createdEnvelope ? "hidden" : ""}`}>
         {step > 1 ? (
@@ -1835,8 +1840,9 @@ export function EnvelopeBuilderForm({
 
         {step === 4 ? (
           <button
-            type="submit"
+            type="button"
             disabled={submitting || documentOptions.length === 0 || hasDuplicateSignerEmails}
+            onClick={() => void requestCreateEnvelope()}
             className={primaryButtonClass}
             aria-label="Create envelope"
           >
