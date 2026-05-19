@@ -3,14 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "node scripts/copy-pdf-worker.mjs && next dev -p 3030",
-    "prebuild": "node scripts/copy-pdf-worker.mjs && prisma generate",
+    "dev": "node scripts/ensure-deploy-env.mjs && node scripts/copy-pdf-worker.mjs && next dev -p 3030",
+    "prebuild": "node scripts/ensure-deploy-env.mjs && node scripts/copy-pdf-worker.mjs && prisma generate && prisma migrate deploy",
     "build": "next build",
     "start": "next start -p 3030",
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "postinstall": "node scripts/copy-pdf-worker.mjs"
+    "postinstall": "node scripts/ensure-deploy-env.mjs && node scripts/copy-pdf-worker.mjs"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",

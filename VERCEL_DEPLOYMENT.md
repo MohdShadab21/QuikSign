@@ -1,6 +1,37 @@
 # Deploy QuikSign on Vercel
 
-This guide walks you through deploying QuikSign from scratch on [Vercel](https://vercel.com). Allow about 30–60 minutes the first time (mostly waiting on accounts and DNS).
+This guide walks you through deploying QuikSign on [Vercel](https://vercel.com). Allow about 30–60 minutes the first time (mostly waiting on accounts).
+
+---
+
+## Automatic on every deploy (no manual steps)
+
+After your **one-time** Vercel setup below, each `git push` → Vercel redeploy does this for you:
+
+| Task | How |
+|------|-----|
+| Database tables | `prisma migrate deploy` runs in **`prebuild`** |
+| `DATABASE_URL` | `scripts/ensure-deploy-env.mjs` copies from Prisma Postgres vars (`POSTGRES_URL`, `DATABASE_URL_POSTGRES_URL`, `DATABASE_URL_DATABASE_URL`, etc.) if `DATABASE_URL` is missing |
+| Signing link domain | `lib/utils/app-url.ts` uses request host + `VERCEL_*`; build script sets `NEXT_PUBLIC_APP_URL` from `VERCEL_PROJECT_PRODUCTION_URL` when unset |
+| PDF.js worker | Copied to `/public` on `postinstall` / `prebuild` |
+
+You do **not** need to run migrations by hand or rename `DATABASE_URL_DATABASE_URL` manually.
+
+---
+
+## One-time setup in Vercel (required secrets only)
+
+Set these **once** in **Settings → Environment Variables** (Production). After that, only deploy:
+
+| Variable | Required? | Notes |
+|----------|-----------|--------|
+| **Prisma Postgres** or `DATABASE_URL` | Yes | Link **Storage → Prisma Postgres** to the project *or* add `DATABASE_URL` — aliases are mapped automatically |
+| `CLOUDINARY_*` (3 vars) | Yes | PDF storage |
+| `SMTP_*` | Yes | Signing emails |
+| `NEXT_PUBLIC_APP_URL` | Recommended | `https://quik-sign.vercel.app` — auto-filled from Vercel if omitted |
+| `NEXT_PUBLIC_DEMO_*` | Optional | Demo dashboard identity headers |
+
+Do **not** commit `.env` to Git. Production secrets live only in Vercel.
 
 ---
 
@@ -52,32 +83,31 @@ Pick one provider and create a **PostgreSQL** database.
 2. **Settings → Database → Connection string → URI** (use **Transaction** pooler for serverless).
 3. Save as `DATABASE_URL`.
 
-### Option C: Vercel Postgres
+### Option C: Vercel Postgres / Prisma Postgres
 
-1. In the Vercel dashboard, **Storage → Create Database → Postgres**.
-2. Connect it to your project later; Vercel can inject `DATABASE_URL` automatically.
+1. In the Vercel dashboard, **Storage → Create Database** (Postgres or Prisma Postgres).
+2. Vercel may create several variables (`POSTGRES_URL`, `PRISMA_DATABASE_URL`, etc.).
+3. **Important:** QuikSign only reads **`DATABASE_URL`** (see `prisma/schema.prisma`).
+4. Add a **new** environment variable:
+   - **Name:** `DATABASE_URL`
+   - **Value:** the same `postgres://...` connection string (copy from `POSTGRES_URL` or `PRISMA_DATABASE_URL`)
+   - **Environments:** Production (and Preview if needed)
+5. Redeploy after saving.
+
+Names like `DATABASE_URL_POSTGRES_URL` are **not** used by the app — the name must be exactly `DATABASE_URL`.
 
 ---
 
-## Step 3 — Run database migrations (one time)
+## Step 3 — Database (usually automatic)
 
-Your production database must match `prisma/schema.prisma`. Run migrations **from your machine** (or CI), not inside the Vercel build.
+1. In Vercel: **Storage → Create → Prisma Postgres** (or Postgres) → **Connect to project**.
+2. Deploy. The build log should show:
+   - `[ensure-deploy-env] DATABASE_URL set from …`
+   - `Applying migration` / `All migrations have been applied`
 
-1. Install dependencies locally if needed: `npm install`
-2. Set `DATABASE_URL` to your **production** connection string (temporarily in a local `.env` or inline):
+If you see `The table public.Envelope does not exist`, open the build log — migrations failed (wrong DB URL or DB unreachable). Fix storage connection and redeploy.
 
-```bash
-# PowerShell (Windows)
-$env:DATABASE_URL="postgresql://USER:PASSWORD@HOST/DATABASE?sslmode=require"
-npx prisma migrate deploy
-```
-
-```bash
-# macOS / Linux
-DATABASE_URL="postgresql://USER:PASSWORD@HOST/DATABASE?sslmode=require" npx prisma migrate deploy
-```
-
-You should see migrations applied successfully. If this fails, fix the connection string before deploying the app.
+**Manual fallback (rare):** run `npx prisma migrate deploy` locally with the same `DATABASE_URL` as Vercel.
 
 ---
 
@@ -141,7 +171,8 @@ In the import screen (or later: **Project → Settings → Environment Variables
 | Variable | Example / notes |
 |----------|-----------------|
 | `DATABASE_URL` | Your Neon/Supabase pooled Postgres URL |
-| `NEXT_PUBLIC_APP_URL` | `https://your-project.vercel.app` (no trailing slash). **Update after first deploy** if you use a custom domain |
+| `NEXT_PUBLIC_APP_URL` | Recommended: `https://quik-sign.vercel.app` (no trailing slash). **Optional on Vercel** — build auto-sets from `VERCEL_PROJECT_PRODUCTION_URL` if missing; do not set to `localhost` |
+| `APP_URL` | Optional; same as `NEXT_PUBLIC_APP_URL` |
 | `CLOUDINARY_CLOUD_NAME` | From Cloudinary dashboard |
 | `CLOUDINARY_API_KEY` | From Cloudinary dashboard |
 | `CLOUDINARY_API_SECRET` | From Cloudinary dashboard |
@@ -189,15 +220,14 @@ The dashboard sends these as `x-user-id` / `x-user-email` / `x-org-id`:
 
 ---
 
-## Step 9 — Fix `NEXT_PUBLIC_APP_URL` after first deploy
+## Step 9 — Signing URLs (usually automatic)
 
-Signing links and emails use `NEXT_PUBLIC_APP_URL`.
+Signing links use `NEXT_PUBLIC_APP_URL` and/or the live request host.
 
-1. Copy your live URL from Vercel (e.g. `https://quiksign-xxx.vercel.app`).
-2. **Settings → Environment Variables** → set `NEXT_PUBLIC_APP_URL` to that exact URL (no `/` at the end).
-3. **Redeploy** (Deployments → ⋮ on latest → Redeploy) so the client bundle picks up the new value.
+- **Recommended:** set `NEXT_PUBLIC_APP_URL` = `https://quik-sign.vercel.app` and redeploy once.
+- **If you skip it:** the build script sets it from Vercel’s `VERCEL_PROJECT_PRODUCTION_URL`; runtime emails also use the request host (`lib/utils/app-url.ts`).
 
-If you add a custom domain later, update this variable again and redeploy.
+If you add a **custom domain**, set `NEXT_PUBLIC_APP_URL` to that domain and redeploy.
 
 ---
 
@@ -245,7 +275,18 @@ If emails do not arrive, check Vercel **Functions** logs for the `/api/envelopes
 
 ### Signing links go to `localhost`
 
-- `NEXT_PUBLIC_APP_URL` is wrong or was not set before build. Fix in Vercel and **redeploy**.
+**Cause:** `NEXT_PUBLIC_APP_URL` in Vercel (or your local `.env` copied to Vercel) is `http://localhost:3030` or empty with an old fallback.
+
+**Fix:**
+
+1. Vercel → **Settings → Environment Variables**
+2. Set **`NEXT_PUBLIC_APP_URL`** = `https://quik-sign.vercel.app` (your live URL, no trailing `/`)
+3. Remove or fix any value that says `localhost`
+4. **Redeploy**
+
+After the code update in `lib/utils/app-url.ts`, new deploys also derive the URL from the request host on Vercel when `NEXT_PUBLIC_APP_URL` is wrong — but you should still set the env var for consistency.
+
+**Note:** Envelopes already sent contain the old link in the email. Use **Remind** on the envelope or send a new envelope after fixing.
 
 ### PDF preview blank in browser
 
@@ -262,9 +303,17 @@ If emails do not arrive, check Vercel **Functions** logs for the `/api/envelopes
 
 - Expected on Vercel without LibreOffice. Upload **PDF** instead, or save Word as PDF before upload.
 
-### Database “relation does not exist”
+### `The table public.Envelope does not exist` (or Document / AuditLog)
 
-- Run `npx prisma migrate deploy` against production `DATABASE_URL` (Step 3).
+**Cause:** Migrations were never applied to the database Vercel uses.
+
+**Fix:**
+
+1. In Vercel → **Settings → Environment Variables**, copy `DATABASE_URL`.
+2. On your machine, run `npx prisma migrate deploy` with that exact URL (see Step 3, Option B).
+3. Or **Redeploy** after confirming `DATABASE_URL` is set (migrations run in `prebuild`).
+
+Also verify `DATABASE_URL` on Vercel points to the **same** database you migrated — not an old empty database.
 
 ---
 
@@ -277,8 +326,8 @@ If emails do not arrive, check Vercel **Functions** logs for the `/api/envelopes
 - [ ] SMTP credentials ready
 - [ ] Vercel project imported; all required env vars set
 - [ ] First deploy succeeded
-- [ ] `NEXT_PUBLIC_APP_URL` set to live URL and redeployed
-- [ ] Tested: upload PDF → send envelope → sign → download
+- [ ] Build log shows migrations applied + `[ensure-deploy-env]` messages
+- [ ] Tested: send envelope → email link uses `https://quik-sign.vercel.app` (not localhost)
 
 ---
 

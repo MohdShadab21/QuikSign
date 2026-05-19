@@ -6,6 +6,7 @@ import { publishWebhook } from "@/lib/integrations/webhook";
 import { finalizeEnvelopeArtifacts } from "@/lib/signing/finalize-envelope";
 import { sendSigningCompletedEmail, sendSigningInviteEmail } from "@/lib/email/smtp";
 import { checkRateLimit } from "@/lib/security/rate-limit";
+import { buildSigningUrl } from "@/lib/utils/app-url";
 import { EnvelopeStatus, SignerRole, SignerStatus } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -99,8 +100,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    const appUrl = (process.env.NEXT_PUBLIC_APP_URL?.trim() || "http://localhost:3000").replace(/\/$/, "");
-    const signingLink = `${appUrl}/sign/${parsed.data.token}`;
+    const signingLink = buildSigningUrl(parsed.data.token, request);
     const nextRecipient = refreshed?.signers.find(
       (signer) =>
         (signer.status === SignerStatus.PENDING || signer.status === SignerStatus.VIEWED) &&

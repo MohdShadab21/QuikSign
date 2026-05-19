@@ -6,6 +6,7 @@ import { getRequestMeta } from "@/lib/utils/request-meta";
 import { sendSigningCompletedEmail, sendSigningInviteEmail } from "@/lib/email/smtp";
 import { publishWebhook } from "@/lib/integrations/webhook";
 import { finalizeEnvelopeArtifacts } from "@/lib/signing/finalize-envelope";
+import { buildSigningUrl } from "@/lib/utils/app-url";
 import {
   EnvelopeStatus,
   FieldAssignedRole,
@@ -181,8 +182,7 @@ export async function POST(request: NextRequest) {
       return { ...created, autoSignedSignerIds: [] as string[] };
     });
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL?.trim() || "http://localhost:3000";
-    const signingLink = `${appUrl.replace(/\/$/, "")}/sign/${rawToken}`;
+    const signingLink = buildSigningUrl(rawToken, request);
     const meta = getRequestMeta(request);
 
     const auditEntries: Prisma.AuditLogCreateManyInput[] = [

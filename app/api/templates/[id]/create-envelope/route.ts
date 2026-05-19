@@ -2,6 +2,7 @@ import { prisma } from "@/db/prisma";
 import { getRequestUser } from "@/lib/auth/request-user";
 import { createRawSigningToken, hashSigningToken } from "@/lib/utils/tokens";
 import { sendSigningInviteEmail } from "@/lib/email/smtp";
+import { buildSigningUrl } from "@/lib/utils/app-url";
 import { EnvelopeStatus, SignerRole } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
@@ -130,7 +131,7 @@ export async function POST(request: NextRequest, { params }: Params) {
         toEmail: firstSigner.email,
         toName: firstSigner.name,
         envelopeTitle: envelope.title,
-        signingLink: `${process.env.NEXT_PUBLIC_APP_URL}/sign/${rawToken}`,
+        signingLink: buildSigningUrl(rawToken, request),
         emailSubject: envelope.subject ?? undefined,
         emailBody: envelope.message ?? undefined,
       }).catch((error) => {

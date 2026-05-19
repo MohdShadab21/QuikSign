@@ -3,6 +3,7 @@ import { getRequestUser } from "@/lib/auth/request-user";
 import { sendSigningInviteEmail } from "@/lib/email/smtp";
 import { publishWebhook } from "@/lib/integrations/webhook";
 import { createRawSigningToken, hashSigningToken } from "@/lib/utils/tokens";
+import { buildSigningUrl } from "@/lib/utils/app-url";
 import { EnvelopeStatus, SignerRole, SignerStatus } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -10,7 +11,7 @@ type Params = {
   params: Promise<{ id: string }>;
 };
 
-export async function POST(_request: NextRequest, { params }: Params) {
+export async function POST(request: NextRequest, { params }: Params) {
   try {
     const user = await getRequestUser();
     const { id } = await params;
@@ -53,8 +54,7 @@ export async function POST(_request: NextRequest, { params }: Params) {
       },
     });
 
-    const appUrl = (process.env.NEXT_PUBLIC_APP_URL?.trim() || "http://localhost:3000").replace(/\/$/, "");
-    const signingLink = `${appUrl}/sign/${rawToken}`;
+    const signingLink = buildSigningUrl(rawToken, request);
     await sendSigningInviteEmail({
       toEmail: nextSigner.email,
       toName: nextSigner.name,
