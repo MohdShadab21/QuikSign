@@ -692,7 +692,7 @@ export function TemplateBuilderPage({
                         X
                         <input
                           type="number"
-                          step={0.25}
+                          step={0.01}
                           min={0}
                           max={100 - selectedField.width}
                           value={selectedField.x}
@@ -712,7 +712,7 @@ export function TemplateBuilderPage({
                         Y
                         <input
                           type="number"
-                          step={0.25}
+                          step={0.01}
                           min={0}
                           max={100 - selectedField.height}
                           value={selectedField.y}
@@ -732,7 +732,7 @@ export function TemplateBuilderPage({
                         Width
                         <input
                           type="number"
-                          step={0.25}
+                          step={0.01}
                           min={FIELD_MIN_WIDTH_PERCENT}
                           max={100 - selectedField.x}
                           value={selectedField.width}
@@ -755,7 +755,7 @@ export function TemplateBuilderPage({
                         Height
                         <input
                           type="number"
-                          step={0.25}
+                          step={0.01}
                           min={FIELD_MIN_HEIGHT_PERCENT}
                           max={100 - selectedField.y}
                           value={selectedField.height}

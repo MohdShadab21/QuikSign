@@ -845,7 +845,7 @@ export function EnvelopeBuilderForm({
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-8">
+    <form noValidate onSubmit={onSubmit} className="space-y-8">
       {createdEnvelope ? (
         <div className="space-y-6 rounded-2xl border border-border bg-surface p-6 shadow-sm">
           <div className="space-y-1">
@@ -1637,7 +1637,7 @@ export function EnvelopeBuilderForm({
                         X
                         <input
                           type="number"
-                          step={0.25}
+                          step={0.01}
                           min={0}
                           max={100 - (selectedField.width ?? FIELD_MIN_WIDTH_PERCENT)}
                           value={selectedField.x}
@@ -1652,7 +1652,7 @@ export function EnvelopeBuilderForm({
                         Y
                         <input
                           type="number"
-                          step={0.25}
+                          step={0.01}
                           min={0}
                           max={100 - (selectedField.height ?? FIELD_MIN_HEIGHT_PERCENT)}
                           value={selectedField.y}
@@ -1667,7 +1667,7 @@ export function EnvelopeBuilderForm({
                         Width
                         <input
                           type="number"
-                          step={0.25}
+                          step={0.01}
                           min={FIELD_MIN_WIDTH_PERCENT}
                           max={100 - selectedField.x}
                           value={selectedField.width}
@@ -1685,7 +1685,7 @@ export function EnvelopeBuilderForm({
                         Height
                         <input
                           type="number"
-                          step={0.25}
+                          step={0.01}
                           min={FIELD_MIN_HEIGHT_PERCENT}
                           max={100 - selectedField.y}
                           value={selectedField.height}
