@@ -1,0 +1,86 @@
+@config "../tailwind.config.ts";
+@import "tailwindcss";
+
+:root {
+  /* Design tokens (RGB channels) */
+  --color-bg: 248 250 252;
+  --color-surface: 255 255 255;
+  --color-text: 15 23 42;
+  --color-muted: 100 116 139;
+  --color-border: 226 232 240;
+
+  --color-primary: 37 99 235;
+  --color-primary-hover: 29 78 216;
+
+  --color-success: 22 163 74;
+  --color-danger: 220 38 38;
+  --color-warning: 245 158 11;
+
+  /* Non-color tokens */
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+.dark {
+  --color-bg: 2 6 23;
+  --color-surface: 15 23 42;
+  --color-text: 241 245 249;
+  --color-muted: 148 163 184;
+  --color-border: 30 41 59;
+
+  --color-primary: 37 99 235;
+  --color-primary-hover: 29 78 216;
+
+  --color-success: 22 163 74;
+  --color-danger: 220 38 38;
+  --color-warning: 245 158 11;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+html {
+  background-color: rgb(var(--color-bg));
+  color: rgb(var(--color-text));
+  /* Keep scroll targets and focus-visible scrolls clear of the sticky dashboard header */
+  scroll-padding-top: 5.5rem;
+}
+
+/*
+  Paint the app background once, fixed to viewport.
+  This prevents scroll/overscroll "split" seams where html/body
+  backgrounds can diverge across browsers.
+*/
+html::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at top left, rgb(var(--color-primary) / 0.08), transparent 38%),
+    radial-gradient(circle at bottom right, rgb(var(--color-success) / 0.06), transparent 45%),
+    rgb(var(--color-bg));
+}
+
+body {
+  background: transparent;
+  color: rgb(var(--color-text));
+  min-height: 100dvh;
+}
+
+@layer utilities {
+  .text-heading {
+    @apply font-semibold text-text;
+  }
+
+  .text-body {
+    @apply text-muted;
+  }
+
+  .text-label {
+    @apply text-sm text-muted;
+  }
+}
