@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { clsx } from "clsx";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import type { DesignerField } from "@/components/envelopes/pdf-field-designer";
@@ -14,6 +15,9 @@ import {
 import { uiControlClass, uiPrimaryButtonClass, uiSecondaryButtonSmClass } from "@/lib/ui/classes";
 import { useToast } from "@/components/ui/toast-provider";
 import { Check, ChevronDown, ChevronUp, PenLine, Send } from "lucide-react";
+import type { EnvelopeTemplatePrefill } from "@/lib/templates/template-prefill";
+import { templateRoleEmail } from "@/lib/templates/template-prefill";
+import { builderSidePanelClass, builderSplitGridClass } from "@/lib/ui/layout";
 
 const PdfFieldDesigner = dynamic(
   () => import("@/components/envelopes/pdf-field-designer").then((module) => module.PdfFieldDesigner),
@@ -32,8 +36,41 @@ type SignerInput = {
   name: string;
   email: string;
   signingOrder: number;
-  role: "SIGNER" | "CC";
+  role: "SIGNER" | "APPROVER" | "CC";
+  templateRoleKey?: string;
 };
+
+function isTemplatePlaceholderEmail(email: string): boolean {
+  return email.trim().toLowerCase().endsWith("@template.local");
+}
+
+function signersFromTemplatePrefill(prefill: EnvelopeTemplatePrefill): SignerInput[] {
+  return prefill.roles.map((role) => ({
+    name: role.roleName,
+    email: "",
+    signingOrder: role.signingOrder,
+    role: role.role,
+    templateRoleKey: role.roleName,
+  }));
+}
+
+function remapFieldsForSignerEmail(
+  fields: FieldInput[],
+  templateRoleKey: string | undefined,
+  previousEmail: string,
+  nextEmail: string,
+): FieldInput[] {
+  const trimmedNext = nextEmail.trim();
+  if (!trimmedNext) return fields;
+  const placeholder = templateRoleKey ? templateRoleEmail(templateRoleKey) : "";
+  const trimmedPrevious = previousEmail.trim();
+  return fields.map((field) => {
+    const matchesPlaceholder = placeholder.length > 0 && field.signerEmail === placeholder;
+    const matchesPrevious = trimmedPrevious.length > 0 && field.signerEmail === trimmedPrevious;
+    if (!matchesPlaceholder && !matchesPrevious) return field;
+    return { ...field, signerEmail: trimmedNext };
+  });
+}
 
 type FieldInput = DesignerField;
 type QuickFieldType = FieldInput["type"];
@@ -108,20 +145,24 @@ const primaryButtonClass = uiPrimaryButtonClass;
 
 export function EnvelopeBuilderForm({
   documents,
+  templatePrefill = null,
 }: {
   documents: DocumentOption[];
+  templatePrefill?: EnvelopeTemplatePrefill | null;
 }) {
-  const [title, setTitle] = useState(() => documents[0]?.fileName ?? "");
-  const [titleManuallyEdited, setTitleManuallyEdited] = useState(false);
-  const [subject, setSubject] = useState("");
+  const [title, setTitle] = useState(() => templatePrefill?.templateName ?? documents[0]?.fileName ?? "");
+  const [titleManuallyEdited, setTitleManuallyEdited] = useState(() => Boolean(templatePrefill));
+  const [subject, setSubject] = useState(() => templatePrefill?.description ?? "");
   const [message, setMessage] = useState("");
   const [expiresInDays, setExpiresInDays] = useState(2);
   const [documentOptions, setDocumentOptions] = useState<DocumentOption[]>(documents);
   const [documentSource, setDocumentSource] = useState<"select" | "upload">("select");
   const [uploadingDocument, setUploadingDocument] = useState(false);
-  const [documentId, setDocumentId] = useState(() => documents[0]?.id ?? "");
-  const [signers, setSigners] = useState<SignerInput[]>([blankSigner()]);
-  const [fields, setFields] = useState<FieldInput[]>([]);
+  const [documentId, setDocumentId] = useState(() => templatePrefill?.documentId ?? documents[0]?.id ?? "");
+  const [signers, setSigners] = useState<SignerInput[]>(() =>
+    templatePrefill ? signersFromTemplatePrefill(templatePrefill) : [blankSigner()],
+  );
+  const [fields, setFields] = useState<FieldInput[]>(() => templatePrefill?.fields ?? []);
   const [placementPage, setPlacementPage] = useState(1);
   const [previewPageCount, setPreviewPageCount] = useState(1);
   const [dragSignerIndex, setDragSignerIndex] = useState<number | null>(null);
@@ -146,7 +187,7 @@ export function EnvelopeBuilderForm({
   const fieldDrawingRef = useRef(false);
   const { pushToast } = useToast();
   const [optionalSettingsOpen, setOptionalSettingsOpen] = useState(false);
-  const [entryMode, setEntryMode] = useState<"choose" | "send">("choose");
+  const [entryMode, setEntryMode] = useState<"choose" | "send">(() => (templatePrefill ? "send" : "choose"));
 
   const steps = [
     "Select Document",
@@ -234,8 +275,12 @@ export function EnvelopeBuilderForm({
   const hasAllSignerRowsValid = signers.every(
     (signer) => signer.name.trim().length >= 2 && signer.email.trim().length > 0 && signer.signingOrder >= 1,
   );
+  const hasRealRecipientEmails = signers.every(
+    (signer) => signer.role === "CC" || (signer.email.trim().length > 0 && !isTemplatePlaceholderEmail(signer.email)),
+  );
   const canProceedFromStep1 = hasValidTitle && hasSelectedDocument;
-  const canProceedFromStep2 = hasAtLeastOneActiveRecipient && hasAllSignerRowsValid && !hasDuplicateSignerEmails;
+  const canProceedFromStep2 =
+    hasAtLeastOneActiveRecipient && hasAllSignerRowsValid && hasRealRecipientEmails && !hasDuplicateSignerEmails;
   const canProceedFromStep3 = fields.length > 0;
   const canContinue = step === 1 ? canProceedFromStep1 : step === 2 ? canProceedFromStep2 : canProceedFromStep3;
   const completedCount = (canProceedFromStep1 ? 1 : 0) + (canProceedFromStep2 ? 1 : 0) + (canProceedFromStep3 ? 1 : 0);
@@ -246,7 +291,9 @@ export function EnvelopeBuilderForm({
       : step === 2
         ? hasDuplicateSignerEmails
           ? "Fix duplicate recipient emails before continuing."
-          : "Complete valid recipient details (name, email, order)."
+          : !hasRealRecipientEmails
+            ? "Enter a real email for each signer (not the template placeholder)."
+            : "Complete valid recipient details (name, email, order)."
         : "Place at least one field on the document to continue.";
   const nextButtonLabel = step === 1 ? "Continue to Recipients" : step === 2 ? "Continue to Place Fields" : "Continue to Review";
 
@@ -851,7 +898,13 @@ export function EnvelopeBuilderForm({
   }
 
   return (
-    <form noValidate onSubmit={onSubmit} className="space-y-8">
+    <form noValidate onSubmit={onSubmit} className="w-full min-w-0 space-y-6 sm:space-y-8">
+      {templatePrefill && !createdEnvelope ? (
+        <div className="rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 text-sm text-body">
+          Sending from template <span className="font-semibold text-text">{templatePrefill.templateName}</span>. Field
+          placements are loaded — add each recipient&apos;s real name and email in step 2.
+        </div>
+      ) : null}
       {createdEnvelope ? (
         <div className="space-y-6 rounded-2xl border border-border bg-surface p-6 shadow-sm">
           <div className="space-y-1">
@@ -908,7 +961,7 @@ export function EnvelopeBuilderForm({
               </p>
               <p className="text-xs text-muted">Complete each step in order to create a send-ready envelope.</p>
             </div>
-            <div className="flex items-center gap-2 text-xs text-muted">
+            <div className="flex w-full min-w-0 flex-wrap items-center gap-2 text-xs text-muted">
               {steps.map((label, idx) => {
                 const stepNum = idx + 1;
                 const done =
@@ -1098,7 +1151,8 @@ export function EnvelopeBuilderForm({
         <div className="grid gap-6">
           {signers.map((signer, index) => {
             const duplicate = duplicateSignerEmailSet.has(signer.email.trim().toLowerCase());
-            const roleLabel = signer.role === "SIGNER" ? "Signer" : "CC (Viewer)";
+            const roleLabel =
+              signer.role === "SIGNER" ? "Signer" : signer.role === "APPROVER" ? "Approver" : "CC (Viewer)";
             return (
               <div
                 key={`signer-${index}`}
@@ -1117,7 +1171,11 @@ export function EnvelopeBuilderForm({
                     <p className="text-sm font-semibold text-text">
                       {index + 1}. {roleLabel}
                     </p>
-                    <p className="text-xs text-muted">Drag to reorder · Order updates automatically</p>
+                    {signer.templateRoleKey ? (
+                      <p className="text-xs text-primary">Template role: {signer.templateRoleKey}</p>
+                    ) : (
+                      <p className="text-xs text-muted">Drag to reorder · Order updates automatically</p>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     <span
@@ -1175,13 +1233,19 @@ export function EnvelopeBuilderForm({
                       required
                       type="email"
                       value={signer.email}
-                      onChange={(event) =>
+                      placeholder={signer.templateRoleKey ? "name@company.com" : undefined}
+                      onChange={(event) => {
+                        const nextEmail = event.target.value;
+                        const previousEmail = signer.email;
                         setSigners((current) =>
                           current.map((entry, currentIndex) =>
-                            currentIndex === index ? { ...entry, email: event.target.value } : entry,
+                            currentIndex === index ? { ...entry, email: nextEmail } : entry,
                           ),
-                        )
-                      }
+                        );
+                        setFields((current) =>
+                          remapFieldsForSignerEmail(current, signer.templateRoleKey, previousEmail, nextEmail),
+                        );
+                      }}
                       className={`${controlClass} mt-1 ${duplicate ? "border-rose-500 focus-visible:ring-rose-500" : ""}`}
                     />
                   </label>
@@ -1332,8 +1396,8 @@ export function EnvelopeBuilderForm({
 
         <div className="rounded-2xl border border-border bg-surface p-4">
           <p className="text-sm font-semibold text-text">Field Items and others</p>
-          <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
-            <div className="min-w-0 rounded-xl border border-border bg-bg p-3">
+          <div className={builderSplitGridClass}>
+            <div className="min-w-0 rounded-xl border border-border bg-bg p-2 sm:p-3">
               <p className="mb-2 text-xs font-medium text-text">Document</p>
               {selectedFieldIndex !== null ? (
                 <p className="mb-2 text-xs text-body">Selected field is ready for property edits on the right panel.</p>
@@ -1380,7 +1444,7 @@ export function EnvelopeBuilderForm({
                 onPlacementPageChange={setPlacementPage}
                 />
             </div>
-            <div className="space-y-2 rounded-xl border border-border bg-bg p-3 text-xs lg:max-h-full lg:min-h-0 lg:overflow-y-auto">
+            <div className={clsx("rounded-xl border border-border bg-bg p-2 text-xs sm:p-3", builderSidePanelClass)}>
               <p className="text-xs font-medium text-text">Field Property</p>
             <div className="flex items-center justify-between">
               <p className="text-sm font-semibold">Field Properties</p>

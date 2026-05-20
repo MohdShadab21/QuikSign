@@ -36,16 +36,21 @@
   --color-warning: 245 158 11;
 }
 
-html,
-body {
-  height: 100%;
+:root {
+  --app-header-height: 3.75rem;
 }
 
 html {
   background-color: rgb(var(--color-bg));
   color: rgb(var(--color-text));
-  /* Keep scroll targets and focus-visible scrolls clear of the sticky dashboard header */
-  scroll-padding-top: 5.5rem;
+  overflow-x: clip;
+  scroll-padding-top: var(--app-header-height);
+}
+
+@media (min-width: 768px) {
+  :root {
+    --app-header-height: 4rem;
+  }
 }
 
 /*
@@ -68,6 +73,8 @@ body {
   background: transparent;
   color: rgb(var(--color-text));
   min-height: 100dvh;
+  width: 100%;
+  overflow-x: clip;
 }
 
 @layer utilities {

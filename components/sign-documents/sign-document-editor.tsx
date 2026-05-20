@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { withJsonHeaders } from "@/lib/client/api";
 import { mapApiErrorMessage } from "@/lib/client/error-messages";
 import { useToast } from "@/components/ui/toast-provider";
+import { builderSplitGridClass } from "@/lib/ui/layout";
 
 const PdfFieldDesigner = dynamic(
   () => import("@/components/envelopes/pdf-field-designer").then((m) => m.PdfFieldDesigner),
@@ -440,7 +441,7 @@ export function SignDocumentEditor({
           </aside>
         ) : null}
 
-        <div className={`grid gap-4 ${workMode === "EDIT" ? "grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px]" : "grid-cols-1"}`}>
+        <div className={workMode === "EDIT" ? builderSplitGridClass : "grid grid-cols-1 gap-4"}>
           <div className="min-w-0 space-y-2 rounded-2xl border border-border bg-surface p-3">
             <div className="flex flex-wrap items-center gap-2 text-xs">
             <label>

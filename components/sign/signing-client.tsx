@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { clsx } from "clsx";
 import dynamic from "next/dynamic";
 import type { DesignerField } from "@/components/envelopes/pdf-field-designer";
 import { mapApiErrorMessage } from "@/lib/client/error-messages";
@@ -17,6 +18,7 @@ import {
   uiPrimaryButtonClass,
   uiSecondaryButtonXsClass,
 } from "@/lib/ui/classes";
+import { builderSidePanelClass, builderSplitGridClass } from "@/lib/ui/layout";
 import { Check, ChevronLeft, ChevronRight, X } from "lucide-react";
 
 const PdfFieldDesigner = dynamic(
@@ -1019,7 +1021,7 @@ export function SigningClient({ token }: { token: string }) {
         </div>
       )}
 
-      <div className="sticky top-16 z-30 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface/95 px-4 py-3 text-sm shadow-sm backdrop-blur dark:border-white/10 dark:bg-surface/80">
+      <div className="sticky top-[var(--app-header-height)] z-30 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface/95 px-3 py-3 text-sm shadow-sm backdrop-blur sm:px-4 dark:border-white/10 dark:bg-surface/80">
         <div className="flex min-w-0 items-center gap-3">
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-text">{envelope.title}</p>
@@ -1120,8 +1122,8 @@ export function SigningClient({ token }: { token: string }) {
         </div>
       ) : null}
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <div ref={previewSectionRef} className={panelClass}>
+      <div className={builderSplitGridClass}>
+        <div ref={previewSectionRef} className={clsx(panelClass, "min-w-0")}>
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
             <p className="text-xs font-medium text-text">Document preview</p>
             <p className="text-[10px] text-muted">
@@ -1367,7 +1369,7 @@ export function SigningClient({ token }: { token: string }) {
                   <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-1.5 py-0.5 text-emerald-700">Filled</span>
                 </div>
               </div>
-              <div className="mt-2 max-h-72 overflow-y-auto space-y-1.5 pr-1">
+              <div className="mt-2 max-h-none space-y-1.5 pr-1 lg:max-h-56 lg:overflow-y-auto lg:overscroll-contain">
                 {envelope.fields.map((field, index) => {
                   const locked = isSenderLockedField(field);
                   const editable = canSignerEditField(field, activeSignerEmail);

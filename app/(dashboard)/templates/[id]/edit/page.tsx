@@ -1,15 +1,11 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/db/prisma";
 import { TemplateBuilderPage } from "@/components/templates/template-builder-page";
+import { roleEmail } from "@/lib/templates/role-email";
 
 export const dynamic = "force-dynamic";
 
 type Props = { params: Promise<{ id: string }> };
-
-function roleEmail(roleName: string): string {
-  const normalized = roleName.trim().toLowerCase().replaceAll(/\s+/g, ".");
-  return `${normalized || "role"}@template.local`;
-}
 
 export default async function EditTemplatePage({ params }: Props) {
   const { id } = await params;

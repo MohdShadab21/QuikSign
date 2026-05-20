@@ -15,6 +15,8 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast-provider";
 import { appAuthHeaders, withJsonHeaders } from "@/lib/client/api";
 import { mapApiErrorMessage } from "@/lib/client/error-messages";
+import { builderSidePanelClass, builderSplitGridClass } from "@/lib/ui/layout";
+import { roleEmail } from "@/lib/templates/role-email";
 
 const PdfFieldDesigner = dynamic(
   () => import("@/components/envelopes/pdf-field-designer").then((module) => module.PdfFieldDesigner),
@@ -36,11 +38,6 @@ type TemplateBuilderInitial = {
 
 function uid() {
   return Math.random().toString(16).slice(2);
-}
-
-function roleEmail(roleName: string): string {
-  const normalized = roleName.trim().toLowerCase().replaceAll(/\s+/g, ".");
-  return `${normalized || "role"}@template.local`;
 }
 
 function roleNameFromEmail(email: string, roles: RoleDraft[]): string {
@@ -80,7 +77,7 @@ function Stepper({
           aria-hidden
         />
       </div>
-      <div className="grid gap-2 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {items.map((it) => {
           const active = it.id === step;
           const enabled = canGoTo(it.id);
@@ -363,7 +360,7 @@ export function TemplateBuilderPage({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="w-full min-w-0 space-y-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <p className="text-label uppercase">Template Builder</p>
@@ -620,7 +617,7 @@ export function TemplateBuilderPage({
                 </div>
               </div>
 
-              <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
+              <div className={builderSplitGridClass}>
                 <div className="min-w-0 rounded-xl border border-border bg-bg p-3">
                   <p className="mb-2 text-xs font-medium text-text">Document</p>
                   <PdfFieldDesigner
@@ -645,7 +642,7 @@ export function TemplateBuilderPage({
                   {!previewUrl ? <p className="mt-2 text-sm text-muted">Document preview unavailable.</p> : null}
                 </div>
 
-                <div className="rounded-2xl border border-border bg-bg p-4 shadow-sm lg:sticky lg:top-24 lg:self-start">
+                <div className={`rounded-2xl border border-border bg-bg p-3 shadow-sm sm:p-4 ${builderSidePanelClass} lg:sticky lg:top-24 lg:self-start`}>
                   <p className="text-xs font-medium text-text">Field Property</p>
                   <div className="mt-2 flex items-center justify-between">
                     <h3 className="text-heading text-lg">Field Properties</h3>

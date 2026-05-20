@@ -1,14 +1,15 @@
 import { ReactNode } from "react";
 import { DashboardHeader } from "@/components/dashboard/dashboard-header";
 import { ToastProvider } from "@/components/ui/toast-provider";
+import { appShellClass, pageContainerClass, pageMainClass } from "@/lib/ui/layout";
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   return (
     <ToastProvider>
-      <div className="min-h-screen">
+      <div className={appShellClass}>
         <DashboardHeader />
-        <main className="w-full px-4 py-6 md:px-6 md:py-8">
-          <div className="mx-auto w-full max-w-7xl">{children}</div>
+        <main className={pageMainClass}>
+          <div className={pageContainerClass}>{children}</div>
         </main>
       </div>
     </ToastProvider>

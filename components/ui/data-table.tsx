@@ -81,21 +81,43 @@ type DataTableShellProps = {
 export function DataTableShell({ title, toolbar, children, footer, className }: DataTableShellProps) {
   const showHeader = title || toolbar;
   return (
-    <div className={clsx("overflow-hidden rounded-xl border border-border bg-surface shadow-sm", className)}>
+    <div
+      className={clsx(
+        "w-full max-w-full min-w-0 overflow-hidden rounded-xl border border-border bg-surface shadow-sm",
+        className,
+      )}
+    >
       {showHeader ? (
         <div className="flex flex-col gap-3 border-b border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-          {title ? <h2 className="text-heading text-lg">{title}</h2> : <span />}
-          {toolbar}
+          {title ? <h2 className="min-w-0 text-heading text-lg">{title}</h2> : <span />}
+          {toolbar ? <div className="min-w-0 shrink-0">{toolbar}</div> : null}
         </div>
       ) : null}
-      <div className="overflow-x-auto">{children}</div>
+      <div className="w-full max-w-full overflow-x-auto overscroll-x-contain">{children}</div>
       {footer}
     </div>
   );
 }
 
-export function DataTable({ children, className }: { children: ReactNode; className?: string }) {
-  return <table className={clsx("w-full min-w-[720px] border-collapse text-left text-sm", className)}>{children}</table>;
+type DataTableProps = {
+  children: ReactNode;
+  className?: string;
+  /** When true (default), table scrolls horizontally on narrow screens instead of forcing page overflow. */
+  scrollOnNarrow?: boolean;
+};
+
+export function DataTable({ children, className, scrollOnNarrow = true }: DataTableProps) {
+  return (
+    <table
+      className={clsx(
+        "w-full border-collapse text-left text-sm",
+        scrollOnNarrow ? "min-w-0 sm:min-w-[560px] md:min-w-[640px]" : "min-w-0",
+        className,
+      )}
+    >
+      {children}
+    </table>
+  );
 }
 
 export function DataTableHead({ children }: { children: ReactNode }) {

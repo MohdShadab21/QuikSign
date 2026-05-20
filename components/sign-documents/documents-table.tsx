@@ -135,9 +135,9 @@ export function DocumentsTable({ rows, onShare, onDelete }: DocumentsTableProps)
       <DataTableHead>
         <tr>
           <th className="px-4 py-3 text-left font-semibold">Document name</th>
-          <th className="px-4 py-3 text-left font-semibold">Type</th>
-          <th className="px-4 py-3 text-left font-semibold">Fields</th>
-          <th className="px-4 py-3 text-left font-semibold">Created on</th>
+          <th className="hidden px-4 py-3 text-left font-semibold sm:table-cell">Type</th>
+          <th className="hidden px-4 py-3 text-left font-semibold md:table-cell">Fields</th>
+          <th className="hidden px-4 py-3 text-left font-semibold lg:table-cell">Created on</th>
           <th className="w-12 px-4 py-3">
             <span className="sr-only">Actions</span>
           </th>
@@ -152,8 +152,18 @@ export function DocumentsTable({ rows, onShare, onDelete }: DocumentsTableProps)
           >
             <DataTableCell>
               <span className="font-medium text-text group-hover:text-primary">{row.fileName}</span>
+              <div className="mt-1 flex flex-wrap items-center gap-2 sm:hidden">
+                <span
+                  className={`inline-block rounded px-2 py-0.5 text-[10px] font-bold uppercase ${
+                    row.isSignedCopy ? "bg-primary text-white" : "bg-muted/30 text-text"
+                  }`}
+                >
+                  {row.isSignedCopy ? "Signed" : "Original"}
+                </span>
+                <span className="text-[10px] text-muted">{formatCreatedOn(row.createdAt)}</span>
+              </div>
             </DataTableCell>
-            <DataTableCell>
+            <DataTableCell className="hidden sm:table-cell">
               <span
                 className={`inline-block rounded px-2.5 py-1 text-[11px] font-bold uppercase ${
                   row.isSignedCopy ? "bg-primary text-white" : "bg-muted/30 text-text"
@@ -162,10 +172,10 @@ export function DocumentsTable({ rows, onShare, onDelete }: DocumentsTableProps)
                 {row.isSignedCopy ? "Signed" : "Original"}
               </span>
             </DataTableCell>
-            <DataTableCell className="text-sm text-body">
+            <DataTableCell className="hidden text-sm text-body md:table-cell">
               {row.hasPlacedFields ? "Ready" : "Not placed"}
             </DataTableCell>
-            <DataTableCell className="whitespace-nowrap text-sm text-body">
+            <DataTableCell className="hidden whitespace-nowrap text-sm text-body lg:table-cell">
               {formatCreatedOn(row.createdAt)}
             </DataTableCell>
             <DataTableCell>

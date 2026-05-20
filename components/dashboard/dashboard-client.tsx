@@ -220,7 +220,7 @@ export function DashboardClient({ envelopes, auditLogs, summary }: DashboardClie
   ];
 
   return (
-    <div className="space-y-5">
+    <div className="w-full min-w-0 space-y-5">
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {statCards.map((card) => {
           const active = statusFilter === card.filter;
@@ -245,7 +245,8 @@ export function DashboardClient({ envelopes, auditLogs, summary }: DashboardClie
         })}
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1fr_280px]">
+      <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_min(100%,280px)]">
+        <div className="min-w-0">
         <DataTableShell
           footer={
             <TablePagination
@@ -338,11 +339,14 @@ export function DashboardClient({ envelopes, auditLogs, summary }: DashboardClie
             onDownloadPacket={downloadPacket}
           />
         </DataTableShell>
+        </div>
 
+        <div className="min-w-0 xl:max-w-[280px]">
         <ActivityFeed
           auditLogs={auditLogs}
           onViewEnvelope={(id) => router.push(`/envelopes/${id}`)}
         />
+        </div>
       </div>
     </div>
   );

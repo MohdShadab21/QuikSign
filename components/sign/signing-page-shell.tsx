@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { appShellClass, pageMainClass } from "@/lib/ui/layout";
 
 /**
  * Shared shell for the public signing experience. Mirrors the dashboard header so a
@@ -9,9 +10,9 @@ import { ThemeToggle } from "@/components/ui/theme-toggle";
  */
 export function SigningPageShell({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-screen">
-      <header className="sticky top-0 z-40 w-full border-b border-border bg-surface/85 shadow-sm backdrop-blur-md">
-        <div className="flex w-full items-center justify-between gap-4 px-4 py-3 md:px-6">
+    <div className={appShellClass}>
+      <header className="sticky top-0 z-40 w-full min-w-0 border-b border-border bg-surface/85 shadow-sm backdrop-blur-md">
+        <div className="mx-auto flex w-full max-w-5xl min-w-0 items-center justify-between gap-3 px-4 py-3 sm:gap-4 md:px-6">
           <Link href="#" className="flex items-center gap-2" aria-label="QuikSign">
             <div className="grid h-9 w-9 place-items-center rounded-xl bg-primary text-sm font-bold text-white shadow-sm">
               QS
@@ -29,8 +30,8 @@ export function SigningPageShell({ children }: { children: ReactNode }) {
           </div>
         </div>
       </header>
-      <main className="w-full px-4 py-6 md:px-6 md:py-8">
-        <div className="mx-auto w-full max-w-5xl">{children}</div>
+      <main className={pageMainClass}>
+        <div className="mx-auto w-full min-w-0 max-w-5xl">{children}</div>
       </main>
     </div>
   );

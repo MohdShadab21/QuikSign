@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { clsx } from "clsx";
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
@@ -250,12 +251,29 @@ export function PdfFieldDesigner({
   className = "",
 }: PdfFieldDesignerProps) {
   const [numPages, setNumPages] = useState(1);
-  const [renderWidth, setRenderWidth] = useState(760);
+  const [renderWidth, setRenderWidth] = useState(320);
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [selectedFieldIndexes, setSelectedFieldIndexes] = useState<number[]>([]);
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const pageSurfaceRef = useRef<HTMLDivElement | null>(null);
   const suppressClickRef = useRef(false);
+
+  useLayoutEffect(() => {
+    const el = canvasRef.current;
+    if (!el || !documentUrl) return;
+
+    const syncWidth = () => {
+      const w = el.clientWidth;
+      if (w < 48) return;
+      const next = Math.min(1200, Math.max(280, Math.floor(w - 16)));
+      setRenderWidth((prev) => (Math.abs(prev - next) > 2 ? next : prev));
+    };
+
+    syncWidth();
+    const ro = new ResizeObserver(syncWidth);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [documentUrl]);
 
   const getPageCoords = useCallback((clientX: number, clientY: number) => {
     const pageEl = pageSurfaceRef.current ?? canvasRef.current;
@@ -633,7 +651,7 @@ export function PdfFieldDesigner({
   const paletteItems = paletteVariant === "compact" || paletteVariant === "icon" ? compactPalette : palette;
 
   return (
-    <div className={`flex flex-col gap-3 ${className}`.trim()}>
+    <div className={clsx("flex min-w-0 w-full max-w-full flex-col gap-3", className)}>
       {/* Upper section: field types and page tools (fixed, does not scroll) */}
       <section
         aria-label="Field placement tools"
@@ -649,7 +667,7 @@ export function PdfFieldDesigner({
         <div className="space-y-2 p-3">
       {!readOnly ? (
         <>
-          <div className="-mx-0.5 flex gap-1.5 overflow-x-auto pb-0.5 text-xs sm:flex-wrap sm:overflow-visible">
+          <div className="-mx-0.5 flex flex-wrap gap-1.5 pb-0.5 text-xs">
           {paletteItems.map((item) => (
             <button
               key={item.id}
@@ -901,10 +919,14 @@ export function PdfFieldDesigner({
         </div>
       </section>
 
-      {/* Lower section: fixed-height viewport — scroll inside to see the full PDF page */}
+      {/* PDF: flows with page on small screens; capped inner scroll from lg up */}
       <section
         aria-label="Document preview"
-        className="h-[min(58dvh,560px)] min-h-[320px] shrink-0 overflow-hidden rounded-lg border border-border bg-bg sm:min-h-[400px]"
+        className={clsx(
+          "min-w-0 shrink-0 rounded-lg border border-border bg-bg",
+          "max-lg:overflow-visible",
+          "lg:h-[min(56dvh,520px)] lg:min-h-[220px] lg:max-h-[calc(100dvh-11rem)] lg:overflow-hidden",
+        )}
       >
         <div
           ref={canvasRef}
@@ -914,13 +936,17 @@ export function PdfFieldDesigner({
           onMouseMove={onCanvasMouseMove}
           onMouseUp={onCanvasMouseUp}
           onMouseLeave={onCanvasMouseUp}
-          className="h-full w-full overflow-x-auto overflow-y-auto overscroll-contain bg-bg"
+          className={clsx(
+            "w-full max-w-full bg-bg",
+            "max-lg:overflow-x-auto max-lg:overflow-y-visible",
+            "lg:h-full lg:overflow-x-auto lg:overflow-y-auto lg:overscroll-contain",
+          )}
           style={{ WebkitOverflowScrolling: "touch", overscrollBehavior: "contain" }}
         >
         {!documentUrl ? (
           <p className="p-3 text-xs opacity-70">Select a document and provide external auth headers to load PDF preview.</p>
         ) : (
-          <div ref={pageSurfaceRef} className="relative mx-auto w-max min-w-0">
+          <div ref={pageSurfaceRef} className="relative mx-auto min-w-0 max-w-full">
             <Document
               file={documentFile}
               onLoadSuccess={(result) => {

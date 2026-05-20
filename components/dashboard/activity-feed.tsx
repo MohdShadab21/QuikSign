@@ -71,10 +71,10 @@ export function ActivityFeed({ auditLogs, onViewEnvelope }: ActivityFeedProps) {
   }
 
   return (
-    <Card padding="md" className="h-full">
+    <Card padding="md" className="min-w-0">
       <h3 className="text-heading text-lg">Recent activity</h3>
       <p className="mt-0.5 text-sm text-body">Latest events across your envelopes.</p>
-      <div className="mt-4 max-h-[32rem] space-y-4 overflow-y-auto">
+      <div className="mt-4 space-y-4">
         {auditLogs.length === 0 ? (
           <p className="text-sm text-body">No activity yet.</p>
         ) : (

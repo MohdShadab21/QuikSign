@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { clsx } from "clsx";
 import {
   FileSignature,
@@ -28,11 +28,13 @@ function NavLink({
   label,
   icon: Icon,
   onNavigate,
+  compact,
 }: {
   href: string;
   label: string;
   icon: typeof LayoutDashboard;
   onNavigate?: () => void;
+  compact?: boolean;
 }) {
   const pathname = usePathname();
   const active = pathname === href || (href === "/dashboard" && pathname === "/");
@@ -42,8 +44,9 @@ function NavLink({
       href={href}
       onClick={onNavigate}
       className={clsx(
-        "inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition",
+        "inline-flex items-center gap-2 rounded-lg font-semibold transition",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+        compact ? "w-full px-3 py-2.5 text-sm" : "px-3 py-2 text-sm",
         active ? "bg-primary text-white shadow-sm" : "text-text hover:bg-bg",
       )}
     >
@@ -54,12 +57,26 @@ function NavLink({
 }
 
 export function DashboardHeader() {
+  const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
 
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [mobileOpen]);
+
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
+
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-border bg-surface/95 shadow-sm backdrop-blur-md">
-      <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-4 px-4 py-3 md:px-6">
-        <div className="flex min-w-0 items-center gap-3 md:gap-6">
+    <header className="sticky top-0 z-50 w-full min-w-0 border-b border-border bg-surface/95 shadow-sm backdrop-blur-md">
+      <div className="mx-auto flex w-full max-w-7xl min-w-0 items-center justify-between gap-2 px-4 py-3 sm:gap-4 md:px-6">
+        <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-4 md:gap-6">
           <Link href="/dashboard" className="flex shrink-0 items-center gap-2">
             <div className="grid h-9 w-9 place-items-center rounded-lg bg-primary text-sm font-bold text-white shadow-sm">
               QS
@@ -70,18 +87,18 @@ export function DashboardHeader() {
             </div>
           </Link>
 
-          <nav className="hidden items-center gap-1 lg:flex" aria-label="Main">
+          <nav className="hidden min-w-0 items-center gap-0.5 md:flex" aria-label="Main">
             {navItems.map((item) => (
               <NavLink key={item.href} {...item} />
             ))}
           </nav>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           <ThemeToggle className="hidden sm:inline-flex" />
           <button
             type="button"
-            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-bg text-text lg:hidden"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-bg text-text md:hidden"
             onClick={() => setMobileOpen((open) => !open)}
             aria-expanded={mobileOpen}
             aria-controls="mobile-nav"
@@ -100,20 +117,28 @@ export function DashboardHeader() {
       </div>
 
       {mobileOpen ? (
-        <nav
-          id="mobile-nav"
-          className="border-t border-border bg-surface px-4 py-3 lg:hidden"
-          aria-label="Main mobile"
-        >
-          <div className="flex flex-col gap-1">
-            {navItems.map((item) => (
-              <NavLink key={item.href} {...item} onNavigate={() => setMobileOpen(false)} />
-            ))}
-            <div className="mt-2 border-t border-border pt-2">
-              <ThemeToggle />
+        <>
+          <button
+            type="button"
+            className="fixed inset-0 z-40 bg-black/40 md:hidden"
+            aria-label="Close menu"
+            onClick={() => setMobileOpen(false)}
+          />
+          <nav
+            id="mobile-nav"
+            className="fixed left-0 right-0 top-[var(--app-header-height)] z-50 max-h-[calc(100dvh-var(--app-header-height))] overflow-y-auto overscroll-contain border-t border-border bg-surface px-4 py-3 shadow-lg md:hidden"
+            aria-label="Main mobile"
+          >
+            <div className="flex flex-col gap-1">
+              {navItems.map((item) => (
+                <NavLink key={item.href} {...item} compact onNavigate={() => setMobileOpen(false)} />
+              ))}
+              <div className="mt-2 border-t border-border pt-3 sm:hidden">
+                <ThemeToggle />
+              </div>
             </div>
-          </div>
-        </nav>
+          </nav>
+        </>
       ) : null}
     </header>
   );

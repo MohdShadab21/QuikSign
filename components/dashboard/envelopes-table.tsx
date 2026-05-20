@@ -193,9 +193,9 @@ export function EnvelopesTable({
       <DataTableHead>
         <tr>
           <th className="px-4 py-3 text-left font-semibold">Document name</th>
-          <th className="px-4 py-3 text-left font-semibold">Recipient email</th>
+          <th className="hidden px-4 py-3 text-left font-semibold sm:table-cell">Recipient email</th>
           <th className="px-4 py-3 text-left font-semibold">Status</th>
-          <th className="px-4 py-3 text-left font-semibold">Created on</th>
+          <th className="hidden px-4 py-3 text-left font-semibold md:table-cell">Created on</th>
           <th className="w-12 px-4 py-3">
             <span className="sr-only">Actions</span>
           </th>
@@ -218,6 +218,9 @@ export function EnvelopesTable({
                   {row.documentFileName ? (
                     <p className="truncate text-xs text-muted">{row.documentFileName}</p>
                   ) : null}
+                  <p className="mt-0.5 truncate text-xs text-body sm:hidden" title={recipients.title}>
+                    {recipients.display}
+                  </p>
                   {totalSigners > 0 ? (
                     <p className="mt-0.5 text-xs text-muted">
                       {signedCount}/{totalSigners} signed
@@ -225,7 +228,7 @@ export function EnvelopesTable({
                   ) : null}
                 </div>
               </DataTableCell>
-              <DataTableCell>
+              <DataTableCell className="hidden sm:table-cell">
                 <span className="block max-w-[220px] truncate text-sm text-body" title={recipients.title}>
                   {recipients.display}
                 </span>
@@ -236,8 +239,11 @@ export function EnvelopesTable({
                 >
                   {envelopeStatusLabel(row.status)}
                 </span>
+                <p className="mt-1 text-[10px] text-muted md:hidden">
+                  {formatCreatedOn(row.sentAt ?? row.createdAt)}
+                </p>
               </DataTableCell>
-              <DataTableCell className="whitespace-nowrap text-sm text-body">
+              <DataTableCell className="hidden whitespace-nowrap text-sm text-body md:table-cell">
                 {formatCreatedOn(row.sentAt ?? row.createdAt)}
               </DataTableCell>
               <DataTableCell>
