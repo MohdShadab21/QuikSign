@@ -1,6 +1,6 @@
 "use client";
 
-import { clsx } from "clsx";
+import { Card } from "@/components/ui/card";
 import { ReactNode } from "react";
 
 type GlassCardProps = {
@@ -8,15 +8,11 @@ type GlassCardProps = {
   className?: string;
 };
 
+/** @deprecated Use Card or SectionCard — kept for gradual migration. */
 export function GlassCard({ children, className }: GlassCardProps) {
   return (
-    <div
-      className={clsx(
-        "rounded-2xl border border-border bg-surface p-6 shadow-sm dark:border-white/10 dark:bg-surface/80 dark:shadow-xl dark:backdrop-blur-md",
-        className,
-      )}
-    >
+    <Card className={className} padding="lg">
       {children}
-    </div>
+    </Card>
   );
 }

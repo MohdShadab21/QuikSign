@@ -13,6 +13,7 @@ import {
 } from "@/lib/envelopes/field-dimensions";
 import { uiControlClass, uiPrimaryButtonClass, uiSecondaryButtonSmClass } from "@/lib/ui/classes";
 import { useToast } from "@/components/ui/toast-provider";
+import { Check, ChevronDown, ChevronUp, PenLine, Send } from "lucide-react";
 
 const PdfFieldDesigner = dynamic(
   () => import("@/components/envelopes/pdf-field-designer").then((module) => module.PdfFieldDesigner),
@@ -826,20 +827,20 @@ export function EnvelopeBuilderForm({
           <button
             type="button"
             onClick={() => setEntryMode("send")}
-            className="group rounded-xl border border-emerald-500/50 bg-bg p-6 text-left transition hover:border-emerald-500 hover:shadow-sm"
+            className="group rounded-xl border border-border bg-bg p-6 text-left transition hover:border-primary hover:shadow-sm"
           >
-            <div className="mb-5 text-4xl text-emerald-600" aria-hidden>
-              ✈
+            <div className="mb-4 inline-flex rounded-lg bg-primary/10 p-3 text-primary" aria-hidden>
+              <Send className="h-6 w-6" />
             </div>
             <p className="text-lg font-semibold text-text">Send for signatures</p>
             <p className="mt-1 text-sm text-body">Start the guided send flow for recipients.</p>
           </button>
           <Link
             href="/sign-documents"
-            className="group rounded-xl border border-emerald-500/50 bg-bg p-6 transition hover:border-emerald-500 hover:shadow-sm"
+            className="group rounded-xl border border-border bg-bg p-6 transition hover:border-primary hover:shadow-sm"
           >
-            <div className="mb-5 text-4xl text-emerald-600" aria-hidden>
-              ✎
+            <div className="mb-4 inline-flex rounded-lg bg-primary/10 p-3 text-primary" aria-hidden>
+              <PenLine className="h-6 w-6" />
             </div>
             <p className="text-lg font-semibold text-text">Sign yourself</p>
             <p className="mt-1 text-sm text-body">Upload a document and complete your own signing.</p>
@@ -937,7 +938,7 @@ export function EnvelopeBuilderForm({
                       }`}
                       aria-hidden
                     >
-                      {done ? "✓" : stepNum}
+                      {done ? <Check className="h-3.5 w-3.5" aria-hidden /> : stepNum}
                     </span>
                     <span className="hidden text-xs font-medium sm:inline">{label}</span>
                   </button>
@@ -1331,13 +1332,12 @@ export function EnvelopeBuilderForm({
 
         <div className="rounded-2xl border border-border bg-surface p-4">
           <p className="text-sm font-semibold text-text">Field Items and others</p>
-          <div className="mt-4 grid gap-4 lg:max-h-[calc(100dvh-220px)] lg:grid-cols-[minmax(0,1fr)_320px] lg:items-stretch lg:overflow-auto">
-            <div className="min-w-0 rounded-xl border border-border bg-bg p-3 lg:flex lg:flex-col lg:min-h-0">
+          <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
+            <div className="min-w-0 rounded-xl border border-border bg-bg p-3">
               <p className="mb-2 text-xs font-medium text-text">Document</p>
               {selectedFieldIndex !== null ? (
                 <p className="mb-2 text-xs text-body">Selected field is ready for property edits on the right panel.</p>
               ) : null}
-              <div className="lg:flex-1 lg:min-h-0">
                 <PdfFieldDesigner
                 documentUrl={previewUrl}
                 documentRequestHeaders={previewRequestHeaders}
@@ -1379,9 +1379,8 @@ export function EnvelopeBuilderForm({
                 }}
                 onPlacementPageChange={setPlacementPage}
                 />
-              </div>
             </div>
-            <div className="space-y-2 rounded-xl border border-border bg-bg p-3 text-xs lg:min-h-0 lg:overflow-auto">
+            <div className="space-y-2 rounded-xl border border-border bg-bg p-3 text-xs lg:max-h-full lg:min-h-0 lg:overflow-y-auto">
               <p className="text-xs font-medium text-text">Field Property</p>
             <div className="flex items-center justify-between">
               <p className="text-sm font-semibold">Field Properties</p>
@@ -1709,7 +1708,7 @@ export function EnvelopeBuilderForm({
                       className="inline-flex items-center justify-center gap-1 rounded border border-border bg-bg px-2 py-1.5 text-body focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                       aria-label="Send selected field backward"
                       >
-                        <span aria-hidden>↓</span>
+                        <ChevronDown className="h-4 w-4" aria-hidden />
                         Send Backward
                       </button>
                       <button
@@ -1718,7 +1717,7 @@ export function EnvelopeBuilderForm({
                       className="inline-flex items-center justify-center gap-1 rounded border border-border bg-bg px-2 py-1.5 text-body focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                       aria-label="Bring selected field forward"
                       >
-                        <span aria-hidden>↑</span>
+                        <ChevronUp className="h-4 w-4" aria-hidden />
                         Bring Forward
                       </button>
                     </div>

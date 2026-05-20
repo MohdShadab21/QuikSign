@@ -60,8 +60,7 @@ html::before {
   z-index: -1;
   pointer-events: none;
   background:
-    radial-gradient(circle at top left, rgb(var(--color-primary) / 0.08), transparent 38%),
-    radial-gradient(circle at bottom right, rgb(var(--color-success) / 0.06), transparent 45%),
+    radial-gradient(circle at top left, rgb(var(--color-primary) / 0.05), transparent 42%),
     rgb(var(--color-bg));
 }
 
@@ -81,6 +80,10 @@ body {
   }
 
   .text-label {
-    @apply text-sm text-muted;
+    @apply text-xs font-semibold uppercase tracking-wide text-muted;
+  }
+
+  .page-panel {
+    @apply rounded-xl border border-border bg-surface shadow-sm;
   }
 }

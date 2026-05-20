@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import { prisma } from "@/db/prisma";
 import { getRequestUser } from "@/lib/auth/request-user";
 import { EnvelopePreviewClient, type PreviewEnvelope } from "@/components/envelopes/envelope-preview-client";
@@ -88,7 +89,7 @@ export default async function EnvelopeDetailPage({ params }: Params) {
   };
 
   return (
-    <div className="space-y-6 p-4 md:p-8">
+    <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-label uppercase">Envelope</p>
@@ -97,9 +98,10 @@ export default async function EnvelopeDetailPage({ params }: Params) {
         </div>
         <Link
           href="/dashboard"
-          className="rounded-md border border-border bg-bg px-3 py-2 text-xs text-body hover:bg-surface"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-bg px-3 py-2 text-xs font-medium text-body hover:bg-surface"
         >
-          ← Back to dashboard
+          <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
+          Back to dashboard
         </Link>
       </div>
       <EnvelopePreviewClient envelope={preview} />

@@ -1,13 +1,18 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
+import { clsx } from "clsx";
+import { Search } from "lucide-react";
+import { isSignedCopyFileName, signedCopyFileName } from "@/lib/documents/signed-copy-name";
+import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { DataTableShell, TablePagination } from "@/components/ui/data-table";
+import { DocumentsTable } from "@/components/sign-documents/documents-table";
 import { Input } from "@/components/ui/input";
 import { appAuthHeaders, withJsonHeaders } from "@/lib/client/api";
 import { mapApiErrorMessage } from "@/lib/client/error-messages";
 import { useToast } from "@/components/ui/toast-provider";
+import { uiControlClass } from "@/lib/ui/classes";
 
 type DocumentItem = {
   id: string;
@@ -22,6 +27,8 @@ export function SignDocumentManager({ initialDocuments }: { initialDocuments: Do
   const { pushToast } = useToast();
   const [documents, setDocuments] = useState(initialDocuments);
   const [query, setQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [uploading, setUploading] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [shareDocId, setShareDocId] = useState<string | null>(null);
@@ -34,9 +41,37 @@ export function SignDocumentManager({ initialDocuments }: { initialDocuments: Do
     return documents.filter((d) => d.fileName.toLowerCase().includes(q));
   }, [documents, query]);
 
+  const paginated = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filtered.slice(start, start + pageSize);
+  }, [filtered, page, pageSize]);
+
+  const shareSourceDoc = useMemo(
+    () => (shareDocId ? documents.find((d) => d.id === shareDocId) ?? null : null),
+    [documents, shareDocId],
+  );
+
+  const shareSignedCopyDoc = useMemo(() => {
+    if (!shareSourceDoc) return null;
+    if (shareSourceDoc.isSignedCopy) return shareSourceDoc;
+    const signedName = signedCopyFileName(shareSourceDoc.fileName);
+    return documents.find((d) => d.fileName === signedName) ?? null;
+  }, [documents, shareSourceDoc]);
+
+  const openShareModal = (doc: DocumentItem) => {
+    setShareDocId(doc.id);
+    setShareEmail("");
+    const signedName = signedCopyFileName(doc.fileName);
+    const hasSignedCopy = doc.isSignedCopy || documents.some((d) => d.fileName === signedName);
+    setShareSignedOnly(hasSignedCopy);
+  };
+
   const refresh = async () => {
     const response = await fetch("/api/documents", { headers: appAuthHeaders() });
-    const data = (await response.json()) as { error?: string; documents?: Array<{ id: string; fileName: string; signedDownloadUrl: string; createdAt: string }> };
+    const data = (await response.json()) as {
+      error?: string;
+      documents?: Array<{ id: string; fileName: string; signedDownloadUrl: string; createdAt: string }>;
+    };
     if (!response.ok) throw new Error(mapApiErrorMessage(data.error ?? "Failed to load documents"));
     setDocuments(
       (data.documents ?? []).map((d) => ({
@@ -44,7 +79,7 @@ export function SignDocumentManager({ initialDocuments }: { initialDocuments: Do
         fileName: d.fileName,
         signedDownloadUrl: d.signedDownloadUrl,
         createdAt: d.createdAt,
-        isSignedCopy: /-signed\.pdf$/i.test(d.fileName),
+        isSignedCopy: isSignedCopyFileName(d.fileName),
         hasPlacedFields: false,
       })),
     );
@@ -102,69 +137,87 @@ export function SignDocumentManager({ initialDocuments }: { initialDocuments: Do
   };
 
   return (
-    <div className="space-y-6">
-      <Card className="p-4">
-        <div className="grid gap-3 md:grid-cols-[1fr_auto_auto]">
-          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search documents…" />
+    <div className="space-y-4">
+      <DataTableShell
+        footer={
+          <TablePagination
+            page={page}
+            pageSize={pageSize}
+            total={filtered.length}
+            onPageChange={setPage}
+            onPageSizeChange={(size) => {
+              setPageSize(size);
+              setPage(1);
+            }}
+          />
+        }
+      >
+        <div className="border-b border-border bg-bg/50 px-4 py-3">
+          <p className="mb-3 text-xs text-muted">
+            {filtered.length} document{filtered.length === 1 ? "" : "s"}
+          </p>
+          <div className="flex flex-col gap-3 md:flex-row md:items-center">
+          <div className="relative flex-1">
+            <Search
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted"
+              aria-hidden
+            />
+            <Input
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setPage(1);
+              }}
+              placeholder="Search documents..."
+              className="pl-9"
+            />
+          </div>
           <input
             type="file"
             accept=".pdf,.doc,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword"
             onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text"
+            className={`${uiControlClass} !mt-0`}
           />
           <Button variant="primary" disabled={!file || uploading} onClick={() => void upload()}>
-            {uploading ? "Uploading..." : "Upload Document"}
+            {uploading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
+            {uploading ? "Uploading..." : "Upload"}
           </Button>
+          </div>
         </div>
-      </Card>
-
-      {filtered.length === 0 ? (
-        <Card className="p-6 text-sm text-body">No documents yet. Upload a PDF or Word file to get started.</Card>
-      ) : (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {filtered.map((doc) => (
-            <Card key={doc.id} className="p-5">
-              <p className="truncate text-base font-semibold text-text">{doc.fileName}</p>
-              <p className="mt-1 text-xs text-muted">Created {new Date(doc.createdAt).toLocaleString()}</p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${doc.isSignedCopy ? "border-emerald-400/60 bg-emerald-500/10 text-emerald-300" : "border-blue-400/60 bg-blue-500/10 text-blue-300"}`}>
-                  {doc.isSignedCopy ? "Signed" : "Original"}
-                </span>
-                <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${doc.hasPlacedFields ? "border-primary/60 bg-primary/10 text-primary" : "border-amber-400/60 bg-amber-500/10 text-amber-300"}`}>
-                  {doc.hasPlacedFields ? "Fields Ready" : "No Fields Yet"}
-                </span>
-              </div>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <Link href={`/sign-documents/${doc.id}/edit`} className="flex-1 min-w-[120px]">
-                  <Button size="sm" variant="primary" className="w-full">Edit Document</Button>
-                </Link>
-                <a href={doc.signedDownloadUrl} target="_blank" rel="noreferrer" className="flex-1 min-w-[120px]">
-                  <Button size="sm" className="w-full">Download PDF</Button>
-                </a>
-                <Button size="sm" onClick={() => setShareDocId(doc.id)} className="flex-1 min-w-[120px]">
-                  Share
-                </Button>
-                <Button size="sm" variant="danger" onClick={() => void remove(doc.id)} className="flex-1 min-w-[120px]">
-                  Delete
-                </Button>
-              </div>
-            </Card>
-          ))}
-        </div>
-      )}
+        <DocumentsTable rows={paginated} onShare={openShareModal} onDelete={(id) => void remove(id)} />
+      </DataTableShell>
 
       {shareDocId ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <Card className="w-full max-w-md p-5">
+          <div className="w-full max-w-md rounded-xl border border-border bg-surface p-5 shadow-xl">
             <h3 className="text-heading text-lg">Share document</h3>
             <p className="mt-1 text-sm text-body">Enter recipient email address.</p>
-            <Input className="mt-3" value={shareEmail} onChange={(e) => setShareEmail(e.target.value)} placeholder="recipient@company.com" />
+            <Input
+              className="mt-3"
+              value={shareEmail}
+              onChange={(e) => setShareEmail(e.target.value)}
+              placeholder="recipient@company.com"
+            />
             <label className="mt-3 flex items-center gap-2 text-sm text-body">
-              <input type="checkbox" checked={shareSignedOnly} onChange={(e) => setShareSignedOnly(e.target.checked)} />
+              <input
+                type="checkbox"
+                checked={shareSignedOnly}
+                disabled={!shareSignedCopyDoc}
+                onChange={(e) => setShareSignedOnly(e.target.checked)}
+              />
               Share signed copy only
             </label>
+            {shareSignedOnly && shareSignedCopyDoc ? (
+              <p className="mt-1 text-xs text-muted">Will send: {shareSignedCopyDoc.fileName}</p>
+            ) : null}
+            {shareSourceDoc && !shareSignedCopyDoc ? (
+              <p className="mt-1 text-xs text-warning">
+                No signed copy yet. Sign and save the document to enable sharing the signed PDF.
+              </p>
+            ) : null}
             <div className="mt-4 flex justify-end gap-2">
               <Button
+                variant="secondary"
                 onClick={() => {
                   setShareDocId(null);
                   setShareSignedOnly(true);
@@ -176,10 +229,9 @@ export function SignDocumentManager({ initialDocuments }: { initialDocuments: Do
                 Send
               </Button>
             </div>
-          </Card>
+          </div>
         </div>
       ) : null}
     </div>
   );
 }
-

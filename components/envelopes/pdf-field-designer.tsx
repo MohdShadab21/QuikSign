@@ -77,6 +77,8 @@ type PdfFieldDesignerProps = {
   signingViewEmail?: string;
   onReadOnlyFieldClick?: (field: DesignerField, index: number) => void;
   onDocumentAccessError?: () => void;
+  /** Applied to the root flex column (use `h-full min-h-0` when parent constrains height). */
+  className?: string;
 };
 
 type DragState = {
@@ -113,6 +115,18 @@ const compactPalette: Array<{ id: string; label: string; type: DesignerField["ty
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
+}
+
+/** Map viewport pointer position to % on the PDF page (works when the page is scrolled). */
+function pointerToPagePercent(pageEl: HTMLElement, clientX: number, clientY: number): { x: number; y: number } {
+  const rect = pageEl.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) {
+    return { x: 0, y: 0 };
+  }
+  return {
+    x: ((clientX - rect.left) / rect.width) * 100,
+    y: ((clientY - rect.top) / rect.height) * 100,
+  };
 }
 
 function snapToGrid(value: number, step = 1): number {
@@ -233,13 +247,25 @@ export function PdfFieldDesigner({
   signingViewEmail,
   onReadOnlyFieldClick,
   onDocumentAccessError,
+  className = "",
 }: PdfFieldDesignerProps) {
   const [numPages, setNumPages] = useState(1);
   const [renderWidth, setRenderWidth] = useState(760);
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [selectedFieldIndexes, setSelectedFieldIndexes] = useState<number[]>([]);
   const canvasRef = useRef<HTMLDivElement | null>(null);
+  const pageSurfaceRef = useRef<HTMLDivElement | null>(null);
   const suppressClickRef = useRef(false);
+
+  const getPageCoords = useCallback((clientX: number, clientY: number) => {
+    const pageEl = pageSurfaceRef.current ?? canvasRef.current;
+    if (!pageEl) {
+      return { x: 0, y: 0, width: 1, height: 1 };
+    }
+    const rect = pageEl.getBoundingClientRect();
+    const { x, y } = pointerToPagePercent(pageEl, clientX, clientY);
+    return { x, y, width: rect.width, height: rect.height };
+  }, []);
 
   const safePage = Math.max(1, Math.min(placementPage, numPages));
   const goToPage = (nextPage: number) => {
@@ -269,6 +295,31 @@ export function PdfFieldDesigner({
     // Ensure the top of the PDF is visible when page/doc changes.
     scrollCanvasToTop();
   }, [documentUrl, safePage, scrollCanvasToTop]);
+
+  // Keep wheel/trackpad scroll inside the PDF pane instead of scrolling the whole page.
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) {
+      return;
+    }
+    const onWheel = (event: WheelEvent) => {
+      const canScrollY = el.scrollHeight > el.clientHeight + 1;
+      const canScrollX = el.scrollWidth > el.clientWidth + 1;
+      if (!canScrollY && !canScrollX) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      if (canScrollY) {
+        el.scrollTop += event.deltaY;
+      }
+      if (canScrollX) {
+        el.scrollLeft += event.deltaX;
+      }
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [documentUrl, safePage]);
 
   const pageFields = useMemo(
     () =>
@@ -349,10 +400,8 @@ export function PdfFieldDesigner({
       setSelectedFieldIndexes([]);
       return;
     }
-    if (enableClickToPlace && selectedSignerEmail && canvasRef.current) {
-      const rect = canvasRef.current.getBoundingClientRect();
-      const rawX = ((event.clientX - rect.left) / rect.width) * 100;
-      const rawY = ((event.clientY - rect.top) / rect.height) * 100;
+    if (enableClickToPlace && selectedSignerEmail && (pageSurfaceRef.current || canvasRef.current)) {
+      const { x: rawX, y: rawY } = getPageCoords(event.clientX, event.clientY);
       const width = fieldFactoryDefaults.width;
       const height = fieldFactoryDefaults.height;
       const x = Number(clamp(rawX - width / 2, 0, 100 - width).toFixed(2));
@@ -369,7 +418,7 @@ export function PdfFieldDesigner({
     if (readOnly) {
       return;
     }
-    if (!selectedSignerEmail || !canvasRef.current) {
+    if (!selectedSignerEmail || !(pageSurfaceRef.current || canvasRef.current)) {
       return;
     }
     const draggedType = event.dataTransfer.getData("application/x-quiksign-field-type") as DesignerField["type"];
@@ -377,9 +426,7 @@ export function PdfFieldDesigner({
     if (!draggedType) {
       return;
     }
-    const rect = canvasRef.current.getBoundingClientRect();
-    const rawX = ((event.clientX - rect.left) / rect.width) * 100;
-    const rawY = ((event.clientY - rect.top) / rect.height) * 100;
+    const { x: rawX, y: rawY } = getPageCoords(event.clientX, event.clientY);
     let x = Number(clamp(rawX, 0, 100).toFixed(2));
     let y = Number(clamp(rawY, 0, 100).toFixed(2));
     const maxZ = fields.reduce((currentMax, entry) => Math.max(currentMax, entry.zIndex ?? 1), 1);
@@ -415,10 +462,11 @@ export function PdfFieldDesigner({
   };
 
   const applyDragAt = useCallback((clientX: number, clientY: number) => {
-    if (!dragState || !canvasRef.current) {
+    if (!dragState || !(pageSurfaceRef.current || canvasRef.current)) {
       return;
     }
-    const rect = canvasRef.current.getBoundingClientRect();
+    const pageEl = pageSurfaceRef.current ?? canvasRef.current!;
+    const rect = pageEl.getBoundingClientRect();
     const deltaXPercent = ((clientX - dragState.startClientX) / rect.width) * 100;
     const deltaYPercent = ((clientY - dragState.startClientY) / rect.height) * 100;
 
@@ -582,11 +630,27 @@ export function PdfFieldDesigner({
     );
   };
 
+  const paletteItems = paletteVariant === "compact" || paletteVariant === "icon" ? compactPalette : palette;
+
   return (
-    <div className="space-y-2">
+    <div className={`flex flex-col gap-3 ${className}`.trim()}>
+      {/* Upper section: field types and page tools (fixed, does not scroll) */}
+      <section
+        aria-label="Field placement tools"
+        className="shrink-0 rounded-lg border border-border bg-surface shadow-sm"
+      >
+        <div className="rounded-t-lg border-b border-border bg-muted/40 px-3 py-2">
+          {!readOnly ? (
+            <p className="text-xs font-medium text-text">Drag a field type onto the document below.</p>
+          ) : (
+            <p className="text-xs font-medium text-text">Document controls</p>
+          )}
+        </div>
+        <div className="space-y-2 p-3">
       {!readOnly ? (
-        <div className="flex flex-wrap gap-2 text-xs">
-          {(paletteVariant === "compact" || paletteVariant === "icon" ? compactPalette : palette).map((item) => (
+        <>
+          <div className="-mx-0.5 flex gap-1.5 overflow-x-auto pb-0.5 text-xs sm:flex-wrap sm:overflow-visible">
+          {paletteItems.map((item) => (
             <button
               key={item.id}
               type="button"
@@ -599,12 +663,12 @@ export function PdfFieldDesigner({
                 event.dataTransfer.setData("text/plain", item.type);
                 event.dataTransfer.effectAllowed = "copy";
               }}
-              className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 ${
+              className={`inline-flex shrink-0 items-center gap-1 rounded-md border px-2.5 py-1.5 ${
                 (selectedPaletteKey ? selectedPaletteKey === item.id : selectedFieldType === item.type)
                   ? "border-primary bg-primary/10 text-primary"
                   : "border-border bg-bg text-text"
               }`}
-              title="Drag to PDF to place"
+              title="Drag onto the document"
             >
               {paletteVariant === "icon" ? (
                 <span>{item.label}</span>
@@ -615,12 +679,13 @@ export function PdfFieldDesigner({
                       {item.icon}
                     </span>
                   ) : null}
-                  <span>Drag {item.label}</span>
+                  <span>{paletteVariant === "compact" ? item.label : `Drag ${item.label}`}</span>
                 </>
               )}
             </button>
           ))}
-        </div>
+          </div>
+        </>
       ) : null}
       {minimalViewerChrome && readOnly && showZoomControls ? (
         <div className="mb-2 inline-flex items-center gap-1 rounded border border-border bg-bg px-1 py-0.5 text-xs">
@@ -692,38 +757,46 @@ export function PdfFieldDesigner({
         </div>
       ) : null}
       {!minimalViewerChrome ? (
-      <div className="flex flex-wrap items-center gap-2 text-xs">
-        <div className="inline-flex items-center gap-1 rounded border border-border bg-bg px-1 py-0.5">
-          <button
-            type="button"
-            onClick={() => goToPage(safePage - 1)}
-            disabled={!onPlacementPageChange || safePage <= 1}
-            className="rounded px-1.5 py-0.5 disabled:opacity-40"
-            aria-label="Previous page"
-          >
-            Prev
-          </button>
-          <span className="px-1 text-[11px]">Page {safePage}/{numPages}</span>
-          <button
-            type="button"
-            onClick={() => goToPage(safePage + 1)}
-            disabled={!onPlacementPageChange || safePage >= numPages}
-            className="rounded px-1.5 py-0.5 disabled:opacity-40"
-            aria-label="Next page"
-          >
-            Next
-          </button>
+      <div className="flex flex-col gap-2 text-xs sm:flex-row sm:flex-wrap sm:items-center">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex items-center gap-1 rounded-lg border border-border bg-bg px-1 py-0.5 shadow-sm">
+            <button
+              type="button"
+              onClick={() => goToPage(safePage - 1)}
+              disabled={!onPlacementPageChange || safePage <= 1}
+              className="rounded px-2 py-1 font-medium disabled:opacity-40"
+              aria-label="Previous page"
+            >
+              Prev
+            </button>
+            <span className="min-w-[4.5rem] px-1 text-center text-[11px] font-medium text-text">
+              {safePage} / {numPages}
+            </span>
+            <button
+              type="button"
+              onClick={() => goToPage(safePage + 1)}
+              disabled={!onPlacementPageChange || safePage >= numPages}
+              className="rounded px-2 py-1 font-medium disabled:opacity-40"
+              aria-label="Next page"
+            >
+              Next
+            </button>
+          </div>
+          <span className="rounded-md border border-border bg-surface px-2 py-1 text-[11px] text-body">
+            {numPages} page{numPages === 1 ? "" : "s"}
+          </span>
         </div>
-        <span className="rounded border border-border bg-surface px-2 py-1 text-body">Pages: {numPages}</span>
         {!readOnly ? (
-          <>
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={() => onUndo()}
               disabled={!canUndo}
-              className="rounded border border-border px-2 py-1 text-text disabled:opacity-50"
+              className="rounded-md border border-border px-2 py-1 text-text disabled:opacity-50"
             >
-              Undo (Ctrl/Cmd+Z)
+              <span className="hidden sm:inline">Undo </span>
+              <span className="text-[11px] text-muted sm:hidden">Undo</span>
+              <span className="hidden text-[11px] text-muted sm:inline">(Ctrl/Cmd+Z)</span>
             </button>
             <button
               type="button"
@@ -737,18 +810,18 @@ export function PdfFieldDesigner({
                 }
               }}
               disabled={pageFields.length === 0}
-              className="rounded border border-rose-400/70 px-2 py-1 text-rose-600 disabled:opacity-50"
+              className="rounded-md border border-rose-400/70 px-2 py-1 text-rose-600 disabled:opacity-50"
             >
-              Clear This Page
+              Clear page
             </button>
-          </>
+          </div>
         ) : null}
         {showZoomControls ? (
-          <div className="inline-flex items-center gap-1 rounded border border-border bg-bg px-1 py-0.5">
+          <div className="inline-flex items-center gap-1 rounded-lg border border-border bg-bg px-1 py-0.5 sm:ml-auto">
             <button
               type="button"
               onClick={() => setRenderWidth((current) => Math.max(360, current - 80))}
-              className="rounded px-2 py-1 disabled:opacity-40"
+              className="rounded px-2.5 py-1 disabled:opacity-40"
               aria-label="Zoom out"
             >
               −
@@ -756,95 +829,98 @@ export function PdfFieldDesigner({
             <button
               type="button"
               onClick={() => setRenderWidth(760)}
-              className="rounded px-2 py-1"
+              className="min-w-[3rem] rounded px-2 py-1 text-[11px]"
               aria-label="Reset zoom"
               title="Reset zoom"
             >
-              100%
+              {Math.round((renderWidth / 760) * 100)}%
             </button>
             <button
               type="button"
               onClick={() => setRenderWidth((current) => Math.min(1200, current + 80))}
-              className="rounded px-2 py-1 disabled:opacity-40"
+              className="rounded px-2.5 py-1 disabled:opacity-40"
               aria-label="Zoom in"
             >
               +
             </button>
           </div>
         ) : (
-          <>
-            <div className="inline-flex items-center gap-1">
+          <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+            <div className="inline-flex items-center gap-1 rounded-lg border border-border bg-bg px-1 py-0.5">
               <button
                 type="button"
                 onClick={() => setRenderWidth((current) => Math.max(360, current - 80))}
-                className="rounded border border-border px-2 py-1"
+                className="rounded px-2 py-1"
+                aria-label="Zoom out"
               >
-                -
+                −
               </button>
               <button
                 type="button"
                 onClick={() => setRenderWidth(760)}
-                className="rounded border border-border px-2 py-1"
+                className="rounded px-2 py-1 text-[11px]"
+                aria-label="Reset zoom"
               >
                 100%
               </button>
               <button
                 type="button"
                 onClick={() => setRenderWidth((current) => Math.min(1200, current + 80))}
-                className="rounded border border-border px-2 py-1"
+                className="rounded px-2 py-1"
+                aria-label="Zoom in"
               >
                 +
               </button>
             </div>
-            <label className="inline-flex items-center gap-1">
-              Preview width
+            <label className="hidden items-center gap-1 lg:inline-flex">
+              Width
               <input
                 type="number"
                 min={360}
                 max={1200}
                 value={renderWidth}
                 onChange={(event) => setRenderWidth(Number(event.target.value))}
-                className="w-20 rounded border border-border bg-bg px-2 py-1 text-text"
+                className="w-16 rounded border border-border bg-bg px-2 py-1 text-text"
               />
             </label>
-          </>
+          </div>
         )}
         {selectedFieldIndexes.length > 0 && !readOnly ? (
-          <span className="rounded bg-warning/10 px-2 py-1 text-warning">
-            {selectedFieldIndexes.length} selected. Del removes, Ctrl/Cmd+D duplicates, Shift+Arrows move faster, Esc clears.
-          </span>
+          <p className="w-full text-[11px] text-warning">
+            {selectedFieldIndexes.length} selected · Del to remove · Ctrl/Cmd+D duplicate
+          </p>
         ) : null}
         {!selectedSignerEmail && !readOnly ? (
-          <span className="rounded bg-rose-500/10 px-2 py-1 text-rose-600">
-            Select signer email first, then drag fields to PDF.
-          </span>
+          <p className="w-full text-[11px] text-rose-600">Choose a signer first, then place fields on the document.</p>
         ) : null}
-        {!readOnly ? (
-          <span className="rounded border border-border bg-surface px-2 py-1 text-body">
-            Drag from palette to place fields
-          </span>
-        ) : (
-          <span className="rounded border border-border bg-surface px-2 py-1 text-body">
-            Preview mode
-          </span>
-        )}
+        {readOnly ? (
+          <span className="text-[11px] text-muted">Preview only</span>
+        ) : null}
       </div>
       ) : null}
+        </div>
+      </section>
 
-      <div
-        ref={canvasRef}
-        onClick={onCanvasClick}
-        onDrop={onCanvasDrop}
-        onDragOver={(event) => event.preventDefault()}
-        onMouseMove={onCanvasMouseMove}
-        onMouseUp={onCanvasMouseUp}
-        onMouseLeave={onCanvasMouseUp}
-        className="relative overflow-auto rounded-lg border border-border bg-surface p-2"
+      {/* Lower section: fixed-height viewport — scroll inside to see the full PDF page */}
+      <section
+        aria-label="Document preview"
+        className="h-[min(58dvh,560px)] min-h-[320px] shrink-0 overflow-hidden rounded-lg border border-border bg-bg sm:min-h-[400px]"
       >
+        <div
+          ref={canvasRef}
+          onClick={onCanvasClick}
+          onDrop={onCanvasDrop}
+          onDragOver={(event) => event.preventDefault()}
+          onMouseMove={onCanvasMouseMove}
+          onMouseUp={onCanvasMouseUp}
+          onMouseLeave={onCanvasMouseUp}
+          className="h-full w-full overflow-x-auto overflow-y-auto overscroll-contain bg-bg"
+          style={{ WebkitOverflowScrolling: "touch", overscrollBehavior: "contain" }}
+        >
         {!documentUrl ? (
           <p className="p-3 text-xs opacity-70">Select a document and provide external auth headers to load PDF preview.</p>
         ) : (
-          <>
+          <div ref={pageSurfaceRef} className="relative mx-auto w-max min-w-0">
             <Document
               file={documentFile}
               onLoadSuccess={(result) => {
@@ -1113,9 +1189,10 @@ export function PdfFieldDesigner({
                 }}
               />
             ))}
-          </>
+          </div>
         )}
-      </div>
+        </div>
+      </section>
     </div>
   );
 }

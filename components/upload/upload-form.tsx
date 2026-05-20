@@ -1,9 +1,12 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { Loader2 } from "lucide-react";
 import { appAuthHeaders } from "@/lib/client/api";
 import { mapApiErrorMessage } from "@/lib/client/error-messages";
 import { useToast } from "@/components/ui/toast-provider";
+import { Button } from "@/components/ui/button";
+import { uiControlClass } from "@/lib/ui/classes";
 
 export function UploadForm() {
   const [file, setFile] = useState<File | null>(null);
@@ -51,26 +54,20 @@ export function UploadForm() {
 
   return (
     <form onSubmit={onSubmit} className="space-y-4">
-      <div className="rounded-xl border border-white/20 bg-white/20 p-4 dark:bg-zinc-900/20">
-        <label className="text-sm font-medium">
-          PDF or Word
-          <input
-            type="file"
-            accept=".pdf,.doc,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword"
-            onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-            className="mt-2 block w-full rounded-md border border-white/30 bg-white/70 px-3 py-2 text-sm dark:bg-zinc-900/50"
-          />
-        </label>
-      </div>
-      <button
-        type="submit"
-        disabled={loading}
-        className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
-      >
-        {loading ? <span className="h-3 w-3 animate-spin rounded-full border-2 border-white/30 border-t-white" /> : null}
-        {loading ? "Uploading..." : "Upload Document"}
-      </button>
-      {result && <p className="text-sm">{result}</p>}
+      <label className="block text-sm font-medium text-text">
+        PDF or Word file
+        <input
+          type="file"
+          accept=".pdf,.doc,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword"
+          onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+          className={`${uiControlClass} file:mr-3 file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-white`}
+        />
+      </label>
+      <Button type="submit" variant="primary" disabled={loading}>
+        {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
+        {loading ? "Uploading…" : "Upload document"}
+      </Button>
+      {result ? <p className="text-sm text-body">{result}</p> : null}
     </form>
   );
 }

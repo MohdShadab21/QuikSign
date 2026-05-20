@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { withJsonHeaders } from "@/lib/client/api";
 import { mapApiErrorMessage } from "@/lib/client/error-messages";
 import { useToast } from "@/components/ui/toast-provider";
+import { PageHeader } from "@/components/ui/page-header";
 
 type TemplateRole = { roleName: string; role: "SIGNER" | "APPROVER" | "CC"; signingOrder: number };
 
@@ -161,15 +162,15 @@ export function TemplateLibrary({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h2 className="text-heading text-2xl">Templates</h2>
-          <p className="mt-1 text-body text-sm">Reusable workflows for sending documents</p>
-        </div>
-        <Link href="/templates/new">
-          <Button variant="primary">Create Template</Button>
-        </Link>
-      </div>
+      <PageHeader
+        title="Templates"
+        description="Reusable workflows for sending documents."
+        actions={
+          <Link href="/templates/new">
+            <Button variant="primary">Create template</Button>
+          </Link>
+        }
+      />
 
       <Card className="p-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">

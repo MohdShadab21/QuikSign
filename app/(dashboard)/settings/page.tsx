@@ -1,14 +1,16 @@
-import { GlassCard } from "@/components/glass/glass-card";
+import { PageHeader } from "@/components/ui/page-header";
+import { SectionCard } from "@/components/ui/section-card";
 
 export default function SettingsPage() {
   return (
-    <GlassCard className="w-full">
-      <h2 className="text-heading text-xl">Settings</h2>
-      <p className="mt-2 max-w-2xl text-body text-sm">
-        Settings will live here (profile, notifications, default signing preferences). This is a placeholder page for the
-        new navigation.
-      </p>
-    </GlassCard>
+    <div className="space-y-6">
+      <PageHeader title="Settings" description="Profile, notifications, and signing preferences." />
+      <SectionCard>
+        <p className="text-sm text-body">
+          Settings will be available in a future update. Use the navigation to send documents, manage templates, or sign
+          files directly.
+        </p>
+      </SectionCard>
+    </div>
   );
 }
-

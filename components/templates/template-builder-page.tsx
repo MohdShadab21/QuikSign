@@ -620,7 +620,7 @@ export function TemplateBuilderPage({
                 </div>
               </div>
 
-              <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+              <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
                 <div className="min-w-0 rounded-xl border border-border bg-bg p-3">
                   <p className="mb-2 text-xs font-medium text-text">Document</p>
                   <PdfFieldDesigner

@@ -4,15 +4,22 @@ import { ReactNode } from "react";
 type CardProps = {
   children: ReactNode;
   className?: string;
-  variant?: "glass" | "solid";
+  variant?: "solid" | "muted";
+  padding?: "none" | "sm" | "md" | "lg";
 };
 
-export function Card({ children, className, variant = "glass" }: CardProps) {
+const paddingClass = {
+  none: "",
+  sm: "p-4",
+  md: "p-5",
+  lg: "p-6",
+};
+
+export function Card({ children, className, variant = "solid", padding = "lg" }: CardProps) {
   const base =
-    variant === "glass"
-      ? "rounded-2xl border border-white/10 bg-surface/80 shadow-lg backdrop-blur-md dark:bg-surface/80"
-      : "rounded-2xl border border-border bg-surface shadow-sm";
+    variant === "muted"
+      ? "rounded-xl border border-border bg-bg shadow-sm"
+      : "rounded-xl border border-border bg-surface shadow-sm";
 
-  return <div className={clsx(base, "p-6", className)}>{children}</div>;
+  return <div className={clsx(base, paddingClass[padding], className)}>{children}</div>;
 }
-

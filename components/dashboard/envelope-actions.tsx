@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { appAuthHeaders, withJsonHeaders } from "@/lib/client/api";
 import { mapApiErrorMessage } from "@/lib/client/error-messages";
+import { Button } from "@/components/ui/button";
 
 type EnvelopeActionsProps = {
   envelopeId: string;
@@ -70,29 +71,32 @@ export function EnvelopeActions({ envelopeId, status }: EnvelopeActionsProps) {
   };
 
   return (
-    <div className="mt-3 rounded-lg border border-white/20 bg-white/20 p-3 text-xs dark:bg-zinc-900/20">
+    <div className="mt-3 rounded-xl border border-border bg-bg p-3 text-xs">
       <div className="flex flex-wrap gap-2">
-        <button
+        <Button
+          size="sm"
+          variant="primary"
           disabled={busy || status !== "SENT"}
           onClick={() => callEndpoint(`/api/envelopes/${envelopeId}/remind`)}
-          className="rounded-md bg-blue-600 px-2 py-1 text-white disabled:opacity-60"
         >
           Remind
-        </button>
-        <button
+        </Button>
+        <Button
+          size="sm"
+          variant="danger"
           disabled={busy || status === "COMPLETED" || status === "VOIDED"}
           onClick={() => callEndpoint(`/api/envelopes/${envelopeId}/void`, { reason: "Voided by sender" })}
-          className="rounded-md bg-rose-600 px-2 py-1 text-white disabled:opacity-60"
         >
           Void
-        </button>
-        <button
+        </Button>
+        <Button
+          size="sm"
+          variant="success"
           disabled={busy || status !== "COMPLETED"}
           onClick={downloadCompletedPacket}
-          className="rounded-md bg-emerald-600 px-2 py-1 text-white disabled:opacity-60"
         >
-          Download Packet
-        </button>
+          Download packet
+        </Button>
       </div>
       {message && <p className="mt-2">{message}</p>}
     </div>

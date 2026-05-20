@@ -17,6 +17,7 @@ import {
   uiPrimaryButtonClass,
   uiSecondaryButtonXsClass,
 } from "@/lib/ui/classes";
+import { Check, ChevronLeft, ChevronRight, X } from "lucide-react";
 
 const PdfFieldDesigner = dynamic(
   () => import("@/components/envelopes/pdf-field-designer").then((module) => module.PdfFieldDesigner),
@@ -1095,8 +1096,8 @@ export function SigningClient({ token }: { token: string }) {
       {showMissingFieldsBanner && fieldsRemaining > 0 ? (
         <div className="flex items-center justify-between gap-3 rounded-xl border border-rose-300/70 bg-rose-500/15 px-3 py-2 text-xs text-rose-800 dark:text-rose-200">
           <span className="font-semibold">Some fields are left unfilled.</span>
-          <button type="button" onClick={() => setShowMissingFieldsBanner(false)} aria-label="Dismiss" className="rounded px-2 text-rose-700 hover:bg-rose-500/20">
-            ✕
+          <button type="button" onClick={() => setShowMissingFieldsBanner(false)} aria-label="Dismiss" className="rounded p-1 text-danger hover:bg-danger/10">
+            <X className="h-4 w-4" aria-hidden />
           </button>
         </div>
       ) : null}
@@ -1125,7 +1126,7 @@ export function SigningClient({ token }: { token: string }) {
             <p className="text-xs font-medium text-text">Document preview</p>
             <p className="text-[10px] text-muted">
               Page {previewPage} of {documentPageCount}
-              {documentPageCount > 1 ? " · ← → or Page Up/Down to change page" : ""}
+              {documentPageCount > 1 ? " · Use arrow keys or Page Up/Down to change page" : ""}
             </p>
           </div>
           {myFieldPages.length > 0 ? (
@@ -1196,14 +1197,16 @@ export function SigningClient({ token }: { token: string }) {
                   onClick={() => goToField(activeFieldIndex - 1)}
                   className={`${secondaryButtonClass} flex-1 justify-center text-xs`}
                 >
-                  ← Previous
+                  <ChevronLeft className="h-4 w-4" aria-hidden />
+                  Previous
                 </button>
                 <button
                   type="button"
                   onClick={() => goToField(activeFieldIndex + 1)}
                   className={`${secondaryButtonClass} flex-1 justify-center text-xs`}
                 >
-                  Next →
+                  Next
+                  <ChevronRight className="h-4 w-4" aria-hidden />
                 </button>
               </div>
             ) : null}
@@ -1410,7 +1413,7 @@ export function SigningClient({ token }: { token: string }) {
                       </p>
                       <p className="mt-0.5 truncate text-[10px] text-muted">
                         {badge} · p{field.page}
-                        {completed ? " · ✓ filled" : locked ? " · locked" : ""}
+                        {completed ? " · Filled" : locked ? " · Locked" : ""}
                       </p>
                     </button>
                   );

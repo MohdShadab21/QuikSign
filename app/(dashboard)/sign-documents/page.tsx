@@ -1,6 +1,7 @@
 import { prisma } from "@/db/prisma";
 import { getRequestUser } from "@/lib/auth/request-user";
 import { getSignedDocumentUrl } from "@/lib/cloudinary/upload";
+import { isSignedCopyFileName } from "@/lib/documents/signed-copy-name";
 import { SignDocumentManager } from "@/components/sign-documents/sign-document-manager";
 
 export const dynamic = "force-dynamic";
@@ -26,24 +27,18 @@ export default async function SignDocumentsPage() {
   });
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-heading text-2xl">Sign Document</h1>
-        <p className="mt-1 max-w-2xl text-sm text-body">Upload a PDF, place fields, sign/save, download, or share.</p>
-      </div>
-      <SignDocumentManager
+    <SignDocumentManager
         initialDocuments={documents.map((d) => ({
           id: d.id,
           fileName: d.fileName,
           signedDownloadUrl: getSignedDocumentUrl(d.cloudinaryId),
           createdAt: d.createdAt.toISOString(),
-          isSignedCopy: /-signed\.pdf$/i.test(d.fileName),
+          isSignedCopy: isSignedCopyFileName(d.fileName),
           hasPlacedFields: Array.isArray((d.auditLogs[0]?.metadata as { fields?: unknown[] } | null)?.fields)
             ? ((d.auditLogs[0]?.metadata as { fields?: unknown[] }).fields?.length ?? 0) > 0
             : false,
         }))}
-      />
-    </div>
+    />
   );
 }
 

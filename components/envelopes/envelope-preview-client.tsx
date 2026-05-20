@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import type { DesignerField } from "@/components/envelopes/pdf-field-designer";
 import { appAuthHeaders } from "@/lib/client/api";
 import { Button } from "@/components/ui/button";
+import { Download } from "lucide-react";
 
 const PdfFieldDesigner = dynamic(
   () => import("@/components/envelopes/pdf-field-designer").then((mod) => mod.PdfFieldDesigner),
@@ -199,7 +200,8 @@ export function EnvelopePreviewClient({ envelope }: { envelope: PreviewEnvelope 
               href={`/api/envelopes/${envelope.id}/packet`}
               className="mt-3 inline-flex items-center gap-1 rounded-md border border-border bg-bg px-3 py-2 text-xs text-body hover:bg-surface"
             >
-              ↓ Download signed packet
+              <Download className="h-3.5 w-3.5" aria-hidden />
+              Download signed packet
             </a>
           ) : null}
         </div>
