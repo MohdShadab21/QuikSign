@@ -14,6 +14,7 @@ import {
   Layers,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { pageEdgePaddingClass } from "@/lib/ui/layout";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -46,7 +47,7 @@ function NavLink({
       className={clsx(
         "inline-flex items-center gap-2 rounded-lg font-semibold transition",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
-        compact ? "w-full px-3 py-2.5 text-sm" : "px-3 py-2 text-sm",
+        compact ? "w-full px-3 py-2.5 text-sm" : "px-3 py-2 text-sm whitespace-nowrap",
         active ? "bg-primary text-white shadow-sm" : "text-text hover:bg-bg",
       )}
     >
@@ -75,8 +76,13 @@ export function DashboardHeader() {
 
   return (
     <header className="sticky top-0 z-50 w-full min-w-0 border-b border-border bg-surface/95 shadow-sm backdrop-blur-md">
-      <div className="mx-auto flex w-full max-w-7xl min-w-0 items-center justify-between gap-2 px-4 py-3 sm:gap-4 md:px-6">
-        <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-4 md:gap-6">
+      <div
+        className={clsx(
+          "flex w-full min-w-0 items-center justify-between gap-3 py-3 sm:gap-4",
+          pageEdgePaddingClass,
+        )}
+      >
+        <div className="flex min-w-0 flex-1 items-center gap-3 sm:gap-5 lg:gap-8">
           <Link href="/dashboard" className="flex shrink-0 items-center gap-2">
             <div className="grid h-9 w-9 place-items-center rounded-lg bg-primary text-sm font-bold text-white shadow-sm">
               QS
@@ -87,7 +93,7 @@ export function DashboardHeader() {
             </div>
           </Link>
 
-          <nav className="hidden min-w-0 items-center gap-0.5 md:flex" aria-label="Main">
+          <nav className="hidden min-w-0 flex-1 items-center gap-0.5 md:flex" aria-label="Main">
             {navItems.map((item) => (
               <NavLink key={item.href} {...item} />
             ))}
@@ -126,7 +132,10 @@ export function DashboardHeader() {
           />
           <nav
             id="mobile-nav"
-            className="fixed left-0 right-0 top-[var(--app-header-height)] z-50 max-h-[calc(100dvh-var(--app-header-height))] overflow-y-auto overscroll-contain border-t border-border bg-surface px-4 py-3 shadow-lg md:hidden"
+            className={clsx(
+              "fixed left-0 right-0 top-[var(--app-header-height)] z-50 max-h-[calc(100dvh-var(--app-header-height))] overflow-y-auto overscroll-contain border-t border-border bg-surface py-3 shadow-lg md:hidden",
+              pageEdgePaddingClass,
+            )}
             aria-label="Main mobile"
           >
             <div className="flex flex-col gap-1">

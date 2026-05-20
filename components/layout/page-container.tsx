@@ -1,12 +1,13 @@
 import { clsx } from "clsx";
 import type { ReactNode } from "react";
+import { pageContainerClass } from "@/lib/ui/layout";
 
 type PageContainerProps = {
   children: ReactNode;
   className?: string;
 };
 
-/** Standard max-width wrapper for dashboard pages. */
+/** Full-width page content wrapper (matches dashboard shell padding via parent main). */
 export function PageContainer({ children, className }: PageContainerProps) {
-  return <div className={clsx("mx-auto w-full max-w-7xl space-y-6", className)}>{children}</div>;
+  return <div className={clsx(pageContainerClass, "space-y-6", className)}>{children}</div>;
 }

@@ -11,6 +11,7 @@ import { ActivityFeed } from "@/components/dashboard/activity-feed";
 import { EnvelopesTable } from "@/components/dashboard/envelopes-table";
 import { DataTableShell, TablePagination } from "@/components/ui/data-table";
 import { Input } from "@/components/ui/input";
+import { dashboardMainGridClass } from "@/lib/ui/layout";
 
 type DashboardSigner = {
   id: string;
@@ -221,7 +222,7 @@ export function DashboardClient({ envelopes, auditLogs, summary }: DashboardClie
 
   return (
     <div className="w-full min-w-0 space-y-5">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid w-full gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {statCards.map((card) => {
           const active = statusFilter === card.filter;
           return (
@@ -245,9 +246,9 @@ export function DashboardClient({ envelopes, auditLogs, summary }: DashboardClie
         })}
       </div>
 
-      <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_min(100%,280px)]">
-        <div className="min-w-0">
-        <DataTableShell
+      <div className={dashboardMainGridClass}>
+        <div className="min-w-0 w-full">
+        <DataTableShell className="w-full"
           footer={
             <TablePagination
               page={page}
@@ -271,8 +272,8 @@ export function DashboardClient({ envelopes, auditLogs, summary }: DashboardClie
                 <span>{summary.completionRate}% completed (of sent)</span>
               ) : null}
             </div>
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-              <div className="relative flex-1">
+            <div className="flex w-full min-w-0 flex-col gap-3 xl:flex-row xl:flex-wrap xl:items-center">
+              <div className="relative min-w-0 flex-1 basis-full xl:basis-[min(100%,20rem)]">
                 <Search
                   className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted"
                   aria-hidden
@@ -341,7 +342,7 @@ export function DashboardClient({ envelopes, auditLogs, summary }: DashboardClie
         </DataTableShell>
         </div>
 
-        <div className="min-w-0 xl:max-w-[280px]">
+        <div className="min-w-0 w-full">
         <ActivityFeed
           auditLogs={auditLogs}
           onViewEnvelope={(id) => router.push(`/envelopes/${id}`)}
