@@ -1,5 +1,6 @@
 import { prisma } from "@/db/prisma";
 import { getRequestUser } from "@/lib/auth/request-user";
+import { documentScopeWhere, templateScopeWhere } from "@/lib/auth/scope";
 import { createTemplateSchema } from "@/lib/validations/envelope";
 import { SignerRole, SignatureFieldType } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
@@ -8,7 +9,7 @@ export async function GET() {
   try {
     const user = await getRequestUser();
     const templates = await prisma.template.findMany({
-      where: { orgId: user.orgId ?? undefined },
+      where: templateScopeWhere(user),
       include: {
         document: { select: { id: true, fileName: true } },
         signers: { orderBy: { signingOrder: "asc" } },
@@ -30,6 +31,14 @@ export async function POST(request: NextRequest) {
     const parsed = createTemplateSchema.safeParse(payload);
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+    }
+
+    const ownedDocument = await prisma.document.findFirst({
+      where: { id: parsed.data.documentId, ...documentScopeWhere(user) },
+      select: { id: true },
+    });
+    if (!ownedDocument) {
+      return NextResponse.json({ error: "Document not found" }, { status: 404 });
     }
 
     const template = await prisma.$transaction(async (tx) => {

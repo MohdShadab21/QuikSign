@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/db/prisma";
 import { getRequestUser } from "@/lib/auth/request-user";
+import { documentScopeWhere } from "@/lib/auth/scope";
 import { getSignedDocumentUrl } from "@/lib/cloudinary/upload";
 import { isSignedCopyFileName, signedCopyFileName } from "@/lib/documents/signed-copy-name";
 import { sendDocumentShareEmail } from "@/lib/email/smtp";
@@ -17,7 +18,7 @@ export async function POST(request: NextRequest) {
     }
 
     const source = await prisma.document.findFirst({
-      where: { id: documentId, orgId: user.orgId ?? undefined },
+      where: { id: documentId, ...documentScopeWhere(user) },
       select: { id: true, fileName: true, cloudinaryId: true },
     });
     if (!source) {
@@ -28,7 +29,7 @@ export async function POST(request: NextRequest) {
     if (signedOnly && !isSignedCopyFileName(source.fileName)) {
       const signedName = signedCopyFileName(source.fileName);
       const signedCopy = await prisma.document.findFirst({
-        where: { orgId: user.orgId ?? undefined, fileName: signedName },
+        where: { ...documentScopeWhere(user), fileName: signedName },
         orderBy: { createdAt: "desc" },
         select: { id: true, fileName: true, cloudinaryId: true },
       });

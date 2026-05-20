@@ -2,7 +2,8 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { prisma } from "@/db/prisma";
-import { getRequestUser } from "@/lib/auth/request-user";
+import { getServerAuthContext } from "@/lib/auth/server-auth";
+import { envelopeScopeWhere } from "@/lib/auth/scope";
 import { EnvelopePreviewClient, type PreviewEnvelope } from "@/components/envelopes/envelope-preview-client";
 
 export const dynamic = "force-dynamic";
@@ -11,16 +12,12 @@ type Params = { params: Promise<{ id: string }> };
 
 export default async function EnvelopeDetailPage({ params }: Params) {
   const { id } = await params;
-  const user = await getRequestUser().catch(() => null);
+  const user = await getServerAuthContext();
 
   const envelope = await prisma.envelope.findFirst({
     where: {
       id,
-      ...(user
-        ? user.orgId
-          ? { orgId: user.orgId }
-          : { createdByEmail: user.userEmail.toLowerCase() }
-        : {}),
+      ...envelopeScopeWhere(user),
     },
     include: {
       document: true,

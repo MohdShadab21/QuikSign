@@ -1,7 +1,7 @@
-import type { Prisma } from "@prisma/client";
 import { prisma } from "@/db/prisma";
 import { EnvelopeBuilderForm } from "@/components/envelopes/envelope-builder-form";
-import { getRequestUser } from "@/lib/auth/request-user";
+import { getServerAuthContext } from "@/lib/auth/server-auth";
+import { documentScopeWhere, templateScopeWhere } from "@/lib/auth/scope";
 import { buildEnvelopePrefillFromTemplate } from "@/lib/templates/template-prefill";
 
 export const dynamic = "force-dynamic";
@@ -14,25 +14,18 @@ export default async function SendDocumentPage({
   const params = await searchParams;
   const templateId = params?.templateId?.trim() ?? "";
 
-  const user = await getRequestUser().catch(() => null);
-
-  const templateWhere: Prisma.TemplateWhereInput = templateId
-    ? user
-      ? user.orgId
-        ? { id: templateId, orgId: user.orgId }
-        : { id: templateId, createdByEmail: user.userEmail.toLowerCase() }
-      : { id: templateId }
-    : { id: "__none__" };
+  const user = await getServerAuthContext();
 
   const [documents, template] = await Promise.all([
     prisma.document.findMany({
+      where: documentScopeWhere(user),
       orderBy: { createdAt: "desc" },
       select: { id: true, fileName: true },
       take: 50,
     }),
     templateId
       ? prisma.template.findFirst({
-          where: templateWhere,
+          where: { id: templateId, ...templateScopeWhere(user) },
           include: {
             signers: { orderBy: { signingOrder: "asc" } },
             fields: true,

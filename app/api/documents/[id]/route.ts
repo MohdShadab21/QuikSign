@@ -1,5 +1,6 @@
 import { prisma } from "@/db/prisma";
 import { getRequestUser } from "@/lib/auth/request-user";
+import { documentScopeWhere } from "@/lib/auth/scope";
 import { getSignedDocumentUrl } from "@/lib/cloudinary/upload";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -15,7 +16,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
     const document = await prisma.document.findFirst({
       where: {
         id,
-        orgId: user.orgId ?? undefined,
+        ...documentScopeWhere(user),
       },
     });
 
@@ -42,7 +43,7 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
     const document = await prisma.document.findFirst({
       where: {
         id,
-        orgId: user.orgId ?? undefined,
+        ...documentScopeWhere(user),
       },
       select: { id: true },
     });

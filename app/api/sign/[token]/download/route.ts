@@ -2,6 +2,7 @@ import { prisma } from "@/db/prisma";
 import { hashSigningToken } from "@/lib/utils/tokens";
 import { getSignedDocumentUrl, fetchCloudinaryBySignedUrl } from "@/lib/cloudinary/upload";
 import { buildSignedSnapshotPdfBuffer } from "@/lib/signing/finalize-envelope";
+import { EnvelopeStatus } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -21,11 +22,15 @@ export async function GET(_request: NextRequest, { params }: Params) {
     const tokenHash = hashSigningToken(token);
 
     const envelope = await prisma.envelope.findFirst({
-      where: { signingTokenHash: tokenHash },
+      where: {
+        signingTokenHash: tokenHash,
+        tokenExpiresAt: { gte: new Date() },
+      },
       select: {
         id: true,
         title: true,
         status: true,
+        tokenExpiresAt: true,
         signedCloudinaryId: true,
         signers: { select: { id: true, signedAt: true } },
         signatureFields: {
@@ -37,6 +42,17 @@ export async function GET(_request: NextRequest, { params }: Params) {
 
     if (!envelope) {
       return NextResponse.json({ error: "Invalid or expired token" }, { status: 404 });
+    }
+
+    if (
+      envelope.status === EnvelopeStatus.VOIDED ||
+      envelope.status === EnvelopeStatus.DECLINED ||
+      envelope.status === EnvelopeStatus.EXPIRED
+    ) {
+      return NextResponse.json(
+        { error: `Download is not available (${envelope.status})` },
+        { status: 409 },
+      );
     }
 
     const fileName = `${safeName(envelope.title)}-${envelope.id}-signed.pdf`;

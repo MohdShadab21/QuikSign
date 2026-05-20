@@ -4,15 +4,31 @@ import {
   FIELD_MIN_WIDTH_PERCENT,
 } from "@/lib/envelopes/field-dimensions";
 
+const TEMPLATE_PLACEHOLDER_EMAIL_SUFFIX = "@template.local";
+
+export function isTemplatePlaceholderEmail(email: string): boolean {
+  return email.trim().toLowerCase().endsWith(TEMPLATE_PLACEHOLDER_EMAIL_SUFFIX);
+}
+
 export const signerInputSchema = z.object({
   name: z.string().min(2).max(120),
-  email: z.string().email(),
+  email: z
+    .string()
+    .email()
+    .refine((value) => !isTemplatePlaceholderEmail(value), {
+      message: "Use a real recipient email, not a template placeholder.",
+    }),
   signingOrder: z.number().int().min(1),
   role: z.enum(["SIGNER", "APPROVER", "CC"]).default("SIGNER"),
 });
 
 export const signatureFieldInputSchema = z.object({
-  signerEmail: z.string().email(),
+  signerEmail: z
+    .string()
+    .email()
+    .refine((value) => !isTemplatePlaceholderEmail(value), {
+      message: "Field signer email must be a real recipient, not a template placeholder.",
+    }),
   label: z.string().max(120).optional(),
   required: z.boolean().optional().default(true),
   readOnly: z.boolean().optional().default(false),

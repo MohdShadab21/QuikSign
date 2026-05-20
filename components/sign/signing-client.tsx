@@ -18,8 +18,8 @@ import {
   uiPrimaryButtonClass,
   uiSecondaryButtonXsClass,
 } from "@/lib/ui/classes";
-import { builderSidePanelClass, builderSplitGridClass } from "@/lib/ui/layout";
-import { Check, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { builderSplitGridClass } from "@/lib/ui/layout";
+import { ChevronLeft, ChevronRight, X } from "lucide-react";
 
 const PdfFieldDesigner = dynamic(
   () => import("@/components/envelopes/pdf-field-designer").then((module) => module.PdfFieldDesigner),

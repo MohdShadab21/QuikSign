@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { prisma } from "@/db/prisma";
 import { getRequestUser } from "@/lib/auth/request-user";
+import { documentScopeWhere } from "@/lib/auth/scope";
 import { fetchCloudinaryFileBuffer, uploadRawPdfToCloudinary, getSignedDocumentUrl } from "@/lib/cloudinary/upload";
 
 export const runtime = "nodejs";
@@ -83,7 +84,7 @@ export async function POST(request: NextRequest) {
     }
 
     const document = await prisma.document.findFirst({
-      where: { id: documentId, orgId: user.orgId ?? undefined },
+      where: { id: documentId, ...documentScopeWhere(user) },
     });
     if (!document) {
       return NextResponse.json({ error: "Document not found" }, { status: 404 });

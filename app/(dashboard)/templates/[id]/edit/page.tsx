@@ -2,6 +2,8 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/db/prisma";
 import { TemplateBuilderPage } from "@/components/templates/template-builder-page";
 import { roleEmail } from "@/lib/templates/role-email";
+import { getServerAuthContext } from "@/lib/auth/server-auth";
+import { documentScopeWhere, templateScopeWhere } from "@/lib/auth/scope";
 
 export const dynamic = "force-dynamic";
 
@@ -9,15 +11,17 @@ type Props = { params: Promise<{ id: string }> };
 
 export default async function EditTemplatePage({ params }: Props) {
   const { id } = await params;
+  const user = await getServerAuthContext();
 
   const [documents, template] = await Promise.all([
     prisma.document.findMany({
+      where: documentScopeWhere(user),
       orderBy: { createdAt: "desc" },
       select: { id: true, fileName: true },
       take: 50,
     }),
     prisma.template.findFirst({
-      where: { id },
+      where: { id, ...templateScopeWhere(user) },
       include: {
         signers: { orderBy: { signingOrder: "asc" } },
         fields: true,

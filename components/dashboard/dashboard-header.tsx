@@ -58,7 +58,6 @@ function NavLink({
 }
 
 export function DashboardHeader() {
-  const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
@@ -69,10 +68,6 @@ export function DashboardHeader() {
       document.body.style.overflow = prev;
     };
   }, [mobileOpen]);
-
-  useEffect(() => {
-    setMobileOpen(false);
-  }, [pathname]);
 
   return (
     <header className="sticky top-0 z-50 w-full min-w-0 border-b border-border bg-surface/95 shadow-sm backdrop-blur-md">

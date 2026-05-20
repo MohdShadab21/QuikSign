@@ -1,5 +1,7 @@
 import { prisma } from "@/db/prisma";
 import { getRequestUser } from "@/lib/auth/request-user";
+import { templateScopeWhere } from "@/lib/auth/scope";
+import { isTemplatePlaceholderEmail } from "@/lib/validations/envelope";
 import { createRawSigningToken, hashSigningToken } from "@/lib/utils/tokens";
 import { sendSigningInviteEmail } from "@/lib/email/smtp";
 import { buildSigningUrl } from "@/lib/utils/app-url";
@@ -20,7 +22,12 @@ const applyTemplateSchema = z.object({
     z.object({
       roleName: z.string().min(2).max(120),
       name: z.string().min(2).max(120),
-      email: z.string().email(),
+      email: z
+        .string()
+        .email()
+        .refine((value) => !isTemplatePlaceholderEmail(value), {
+          message: "Use a real recipient email.",
+        }),
     }),
   ),
 });
@@ -36,7 +43,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     }
 
     const template = await prisma.template.findFirst({
-      where: { id, orgId: user.orgId ?? undefined },
+      where: { id, ...templateScopeWhere(user) },
       include: {
         signers: { orderBy: { signingOrder: "asc" } },
         fields: true,

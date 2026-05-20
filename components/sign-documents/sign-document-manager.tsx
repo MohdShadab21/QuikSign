@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { clsx } from "clsx";
 import { Search } from "lucide-react";
 import { isSignedCopyFileName, signedCopyFileName } from "@/lib/documents/signed-copy-name";
 import { Loader2 } from "lucide-react";
@@ -70,7 +69,13 @@ export function SignDocumentManager({ initialDocuments }: { initialDocuments: Do
     const response = await fetch("/api/documents", { headers: appAuthHeaders() });
     const data = (await response.json()) as {
       error?: string;
-      documents?: Array<{ id: string; fileName: string; signedDownloadUrl: string; createdAt: string }>;
+      documents?: Array<{
+        id: string;
+        fileName: string;
+        signedDownloadUrl: string;
+        createdAt: string;
+        hasPlacedFields?: boolean;
+      }>;
     };
     if (!response.ok) throw new Error(mapApiErrorMessage(data.error ?? "Failed to load documents"));
     setDocuments(
@@ -80,7 +85,7 @@ export function SignDocumentManager({ initialDocuments }: { initialDocuments: Do
         signedDownloadUrl: d.signedDownloadUrl,
         createdAt: d.createdAt,
         isSignedCopy: isSignedCopyFileName(d.fileName),
-        hasPlacedFields: false,
+        hasPlacedFields: Boolean(d.hasPlacedFields),
       })),
     );
   };

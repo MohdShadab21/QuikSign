@@ -44,6 +44,30 @@ describe("envelope validations", () => {
     expect(parsed.success).toBe(true);
   });
 
+  it("rejects template placeholder signer emails", () => {
+    const parsed = createEnvelopeSchema.safeParse({
+      title: "Offer Letter",
+      expiresInDays: 7,
+      documentId: "7b296ab2-593d-4338-8f4a-9825fd0a5cbe",
+      signers: [
+        { name: "Primary", email: "primary.signer@template.local", signingOrder: 1, role: "SIGNER" },
+      ],
+      fields: [
+        {
+          signerEmail: "primary.signer@template.local",
+          page: 1,
+          x: 10,
+          y: 10,
+          width: 20,
+          height: 12,
+          type: "SIGNATURE",
+        },
+      ],
+    });
+
+    expect(parsed.success).toBe(false);
+  });
+
   it("requires signature or seal value in preset payload", () => {
     const parsed = createSigningPresetSchema.safeParse({
       token: "1234567890-token",

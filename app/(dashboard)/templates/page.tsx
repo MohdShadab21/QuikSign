@@ -1,10 +1,14 @@
 import { TemplateLibrary } from "@/components/templates/template-library";
 import { prisma } from "@/db/prisma";
+import { getServerAuthContext } from "@/lib/auth/server-auth";
+import { templateScopeWhere } from "@/lib/auth/scope";
 
 export const dynamic = "force-dynamic";
 
 export default async function TemplatesPage() {
+  const user = await getServerAuthContext();
   const templates = await prisma.template.findMany({
+    where: templateScopeWhere(user),
     orderBy: { createdAt: "desc" },
     include: {
       document: { select: { id: true, fileName: true } },

@@ -1,5 +1,6 @@
 import { prisma } from "@/db/prisma";
 import { getRequestUser } from "@/lib/auth/request-user";
+import { envelopeScopeWhere } from "@/lib/auth/scope";
 import { getSignedDocumentUrl } from "@/lib/cloudinary/upload";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -15,7 +16,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
     const envelope = await prisma.envelope.findFirst({
       where: {
         id,
-        orgId: user.orgId ?? undefined,
+        ...envelopeScopeWhere(user),
       },
       include: {
         document: true,

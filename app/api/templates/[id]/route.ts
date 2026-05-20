@@ -1,5 +1,6 @@
 import { prisma } from "@/db/prisma";
 import { getRequestUser } from "@/lib/auth/request-user";
+import { documentScopeWhere, templateScopeWhere } from "@/lib/auth/scope";
 import { createTemplateSchema } from "@/lib/validations/envelope";
 import { SignerRole, SignatureFieldType } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
@@ -16,7 +17,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
     const template = await prisma.template.findFirst({
       where: {
         id,
-        orgId: user.orgId ?? undefined,
+        ...templateScopeWhere(user),
       },
       include: {
         document: { select: { id: true, fileName: true } },
@@ -41,7 +42,7 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
     const { id } = await params;
 
     const template = await prisma.template.findFirst({
-      where: { id, orgId: user.orgId ?? undefined },
+      where: { id, ...templateScopeWhere(user) },
       select: { id: true },
     });
     if (!template) {
@@ -67,11 +68,19 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     }
 
     const existing = await prisma.template.findFirst({
-      where: { id, orgId: user.orgId ?? undefined },
+      where: { id, ...templateScopeWhere(user) },
       include: { signers: true },
     });
     if (!existing) {
       return NextResponse.json({ error: "Template not found" }, { status: 404 });
+    }
+
+    const ownedDocument = await prisma.document.findFirst({
+      where: { id: parsed.data.documentId, ...documentScopeWhere(user) },
+      select: { id: true },
+    });
+    if (!ownedDocument) {
+      return NextResponse.json({ error: "Document not found" }, { status: 404 });
     }
 
     const updated = await prisma.$transaction(async (tx) => {

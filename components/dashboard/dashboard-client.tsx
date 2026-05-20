@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { clsx } from "clsx";
 import { Search } from "lucide-react";
 import { useToast } from "@/components/ui/toast-provider";
@@ -115,13 +115,11 @@ export function DashboardClient({ envelopes, auditLogs, summary }: DashboardClie
   }, [envelopes, query, sortBy, statusFilter, thresholdMs]);
 
   const paginatedEnvelopes = useMemo(() => {
-    const start = (page - 1) * pageSize;
+    const totalPages = Math.max(1, Math.ceil(filteredEnvelopes.length / pageSize));
+    const safePage = Math.min(page, totalPages);
+    const start = (safePage - 1) * pageSize;
     return filteredEnvelopes.slice(start, start + pageSize);
   }, [filteredEnvelopes, page, pageSize]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [query, statusFilter, sortBy, dateRange]);
 
   const downloadPacket = async (envelopeId: string) => {
     setPendingAction(`packet-${envelopeId}`);
@@ -229,7 +227,10 @@ export function DashboardClient({ envelopes, auditLogs, summary }: DashboardClie
             <button
               key={card.filter}
               type="button"
-              onClick={() => setStatusFilter(card.filter)}
+              onClick={() => {
+                setStatusFilter(card.filter);
+                setPage(1);
+              }}
               className={clsx(
                 "rounded-xl border px-4 py-3 text-left transition-all duration-200",
                 "hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
@@ -280,7 +281,10 @@ export function DashboardClient({ envelopes, auditLogs, summary }: DashboardClie
                 />
                 <Input
                   value={query}
-                  onChange={(e) => setQuery(e.target.value)}
+                  onChange={(e) => {
+                    setQuery(e.target.value);
+                    setPage(1);
+                  }}
                   placeholder="Search document, recipient, or status..."
                   className="mt-0 pl-9"
                 />
@@ -290,7 +294,10 @@ export function DashboardClient({ envelopes, auditLogs, summary }: DashboardClie
                   <button
                     key={chip}
                     type="button"
-                    onClick={() => setStatusFilter(chip)}
+                    onClick={() => {
+                      setStatusFilter(chip);
+                      setPage(1);
+                    }}
                     className={clsx(
                       "rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-150",
                       statusFilter === chip
@@ -312,7 +319,10 @@ export function DashboardClient({ envelopes, auditLogs, summary }: DashboardClie
               </div>
               <select
                 value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+                onChange={(e) => {
+                  setSortBy(e.target.value as typeof sortBy);
+                  setPage(1);
+                }}
                 className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text"
               >
                 <option value="newest">Newest first</option>
@@ -321,7 +331,10 @@ export function DashboardClient({ envelopes, auditLogs, summary }: DashboardClie
               </select>
               <select
                 value={dateRange}
-                onChange={(e) => setDateRange(e.target.value as typeof dateRange)}
+                onChange={(e) => {
+                  setDateRange(e.target.value as typeof dateRange);
+                  setPage(1);
+                }}
                 className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text"
               >
                 <option value="ALL">All time</option>

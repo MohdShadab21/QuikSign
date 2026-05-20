@@ -7,6 +7,7 @@ import {
 } from "@/lib/documents/convert-office-to-pdf";
 import { countPdfPages } from "@/lib/documents/pdf-page-count";
 import { getRequestUser } from "@/lib/auth/request-user";
+import { documentScopeWhere } from "@/lib/auth/scope";
 import { getRequestMeta } from "@/lib/utils/request-meta";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -95,18 +96,28 @@ export async function GET() {
   try {
     const user = await getRequestUser();
     const documents = await prisma.document.findMany({
-      where: {
-        orgId: user.orgId ?? undefined,
-      },
+      where: documentScopeWhere(user),
       orderBy: {
         createdAt: "desc",
       },
+      include: {
+        auditLogs: {
+          where: { event: "SIGN_DOCUMENT_SAVED" },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: { metadata: true },
+        },
+      },
     });
 
-    const hydrated = documents.map((document) => ({
-      ...document,
-      signedDownloadUrl: getSignedDocumentUrl(document.cloudinaryId),
-    }));
+    const hydrated = documents.map((document) => {
+      const fields = (document.auditLogs[0]?.metadata as { fields?: unknown[] } | null)?.fields;
+      return {
+        ...document,
+        signedDownloadUrl: getSignedDocumentUrl(document.cloudinaryId),
+        hasPlacedFields: Array.isArray(fields) ? fields.length > 0 : false,
+      };
+    });
 
     return NextResponse.json({ documents: hydrated });
   } catch (error) {

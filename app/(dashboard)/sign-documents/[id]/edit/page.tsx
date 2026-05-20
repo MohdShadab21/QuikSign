@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/db/prisma";
-import { getRequestUser } from "@/lib/auth/request-user";
+import { getServerAuthContext } from "@/lib/auth/server-auth";
+import { documentScopeWhere } from "@/lib/auth/scope";
 import { getSignedDocumentUrl } from "@/lib/cloudinary/upload";
 import { SignDocumentEditor } from "@/components/sign-documents/sign-document-editor";
 import type { DesignerField } from "@/components/envelopes/pdf-field-designer";
@@ -17,11 +18,11 @@ type SignDocumentSnapshot = {
 };
 
 export default async function SignDocumentEditPage({ params }: Props) {
-  const user = await getRequestUser().catch(() => null);
+  const user = await getServerAuthContext();
   const { id } = await params;
 
   const document = await prisma.document.findFirst({
-    where: user ? { id, orgId: user.orgId ?? undefined } : { id },
+    where: { id, ...documentScopeWhere(user) },
     select: {
       id: true,
       fileName: true,

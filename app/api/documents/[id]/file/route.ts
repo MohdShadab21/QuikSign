@@ -1,5 +1,6 @@
 import { prisma } from "@/db/prisma";
 import { getRequestUser } from "@/lib/auth/request-user";
+import { documentScopeWhere } from "@/lib/auth/scope";
 import { fetchCloudinaryFileBuffer } from "@/lib/cloudinary/upload";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -15,7 +16,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
     const document = await prisma.document.findFirst({
       where: {
         id,
-        orgId: user.orgId ?? undefined,
+        ...documentScopeWhere(user),
       },
       select: { cloudinaryId: true, fileName: true },
     });

@@ -1,5 +1,6 @@
 import { prisma } from "@/db/prisma";
 import { getRequestUser } from "@/lib/auth/request-user";
+import { envelopeScopeWhere } from "@/lib/auth/scope";
 import { sendSigningInviteEmail } from "@/lib/email/smtp";
 import { publishWebhook } from "@/lib/integrations/webhook";
 import { createRawSigningToken, hashSigningToken } from "@/lib/utils/tokens";
@@ -19,7 +20,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     const envelope = await prisma.envelope.findFirst({
       where: {
         id,
-        ...(user.orgId ? { orgId: user.orgId } : { createdByEmail: user.userEmail.toLowerCase() }),
+        ...envelopeScopeWhere(user),
       },
       include: {
         signers: {
@@ -46,22 +47,28 @@ export async function POST(request: NextRequest, { params }: Params) {
 
     const rawToken = createRawSigningToken();
     const tokenHash = hashSigningToken(rawToken);
+    const signingLink = buildSigningUrl(rawToken, request);
+
+    try {
+      await sendSigningInviteEmail({
+        toEmail: nextSigner.email,
+        toName: nextSigner.name,
+        envelopeTitle: envelope.title,
+        signingLink,
+        emailSubject: envelope.subject ?? undefined,
+        emailBody: envelope.message ?? undefined,
+      });
+    } catch (mailError) {
+      console.error("Failed to send reminder email", mailError);
+      return NextResponse.json({ error: "Failed to send reminder email" }, { status: 502 });
+    }
+
     await prisma.envelope.update({
       where: { id: envelope.id },
       data: {
         signingTokenHash: tokenHash,
         tokenExpiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       },
-    });
-
-    const signingLink = buildSigningUrl(rawToken, request);
-    await sendSigningInviteEmail({
-      toEmail: nextSigner.email,
-      toName: nextSigner.name,
-      envelopeTitle: envelope.title,
-      signingLink,
-      emailSubject: envelope.subject ?? undefined,
-      emailBody: envelope.message ?? undefined,
     });
 
     await prisma.auditLog.create({
