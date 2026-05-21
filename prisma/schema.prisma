@@ -20,6 +20,9 @@ model Document {
   fileName        String
   fileUrl         String
   cloudinaryId    String
+  /** Untouched Word upload in Cloudinary (signing uses converted PDF in cloudinaryId). */
+  originalCloudinaryId String?
+  originalFileName     String?
   pageCount       Int?
   conversionMethod String?
   uploadedById    String

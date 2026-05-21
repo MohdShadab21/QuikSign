@@ -17,6 +17,37 @@ export async function uploadPdfToCloudinary(file: Buffer, fileName: string): Pro
   return uploadRawPdfToCloudinary(file, fileName, "quiksign/documents");
 }
 
+/** Store original Word bytes unchanged (authenticated raw). */
+export async function uploadOfficeToCloudinary(
+  file: Buffer,
+  fileName: string,
+): Promise<CloudinaryUploadResult> {
+  const lower = fileName.toLowerCase();
+  const mime = lower.endsWith(".doc")
+    ? "application/msword"
+    : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  const base64 = `data:${mime};base64,${file.toString("base64")}`;
+  const ext = lower.endsWith(".doc") ? "doc" : "docx";
+
+  const result = await cloudinary.uploader.upload(base64, {
+    resource_type: "raw",
+    folder: "quiksign/documents/originals",
+    public_id: fileName.replace(/\.(docx?|DOCX?)$/i, ""),
+    type: "authenticated",
+    overwrite: false,
+    invalidate: true,
+    use_filename: true,
+    unique_filename: true,
+    format: ext,
+  });
+
+  return {
+    secureUrl: result.secure_url,
+    publicId: result.public_id,
+    format: result.format ?? ext,
+  };
+}
+
 export async function uploadRawPdfToCloudinary(
   file: Buffer,
   fileName: string,

@@ -192,7 +192,6 @@ export async function createSignedDocumentPdf(params: {
   }[];
 }): Promise<Buffer> {
   const pdf = await PDFDocument.load(params.sourcePdf);
-  const font = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
   const signatureFont = await pdf.embedFont(StandardFonts.TimesRomanItalic);
 
@@ -226,26 +225,17 @@ export async function createSignedDocumentPdf(params: {
     const fieldHasPrefill = Boolean((field.prefillValue ?? "").trim());
     const prefilledLocked = Boolean(field.prefilledBySender) && fieldHasPrefill;
     const signed = Boolean(signer.signedAt) || prefilledLocked;
-
-    page.drawRectangle({
-      x,
-      y,
-      width,
-      height,
-      color: signed ? rgb(0.92, 0.97, 1) : rgb(0.98, 0.98, 0.99),
-      borderColor: signed ? rgb(0.12, 0.34, 0.65) : rgb(0.45, 0.49, 0.56),
-      borderWidth: 1,
-      opacity: signed ? 0.88 : 0.55,
-    });
+    if (!signed) {
+      continue;
+    }
 
     const [firstName = signer.name, ...restNames] = signer.name.trim().split(/\s+/);
     const lastName = restNames.join(" ").trim() || signer.name;
 
-    if (signed) {
-      const box = { x, y, width, height };
-      const fieldValue = (field.prefillValue ?? "").trim();
+    const box = { x, y, width, height };
+    const fieldValue = (field.prefillValue ?? "").trim();
 
-      if (field.type === "SEAL") {
+    if (field.type === "SEAL") {
         const sealRaw = fieldValue || signer.sealValue?.trim() || "";
         const sealImage = await embedImageFromString(pdf, sealRaw);
         if (sealImage) {
@@ -329,91 +319,14 @@ export async function createSignedDocumentPdf(params: {
           });
         }
       }
-
-      page.drawText(`${signer.role}`, {
-        x: x + 4,
-        y: y + 4,
-        size: 7,
-        font,
-        color: rgb(0.25, 0.35, 0.48),
-      });
-      continue;
-    }
-
-    // Unsigned field placeholder (still shows placement in the final PDF)
-    const placeholder = field.type === "SEAL" ? "STAMP" : field.type;
-    page.drawText(placeholder, {
-      x: x + 4,
-      y: y + height - 12,
-      size: Math.min(10, Math.max(7, height / 3)),
-      font: bold,
-      color: rgb(0.35, 0.4, 0.48),
-      opacity: 0.8,
-    });
-    page.drawText(`${signer.role}`, {
-      x: x + 4,
-      y: y + 4,
-      size: 7,
-      font,
-      color: rgb(0.35, 0.4, 0.48),
-      opacity: 0.85,
-    });
-    page.drawText("Pending", {
-      x: x + Math.max(4, width - 54),
-      y: y + 4,
-      size: 7,
-      font,
-      color: rgb(0.35, 0.4, 0.48),
-      opacity: 0.85,
-    });
   }
 
-  const lastPage = pdf.getPage(pdf.getPageCount() - 1);
-  const blockWidth = Math.min(520, lastPage.getWidth() - 64);
-  const blockX = 32;
-  const blockY = 24;
-  const blockHeight = 94;
-
-  lastPage.drawRectangle({
-    x: blockX,
-    y: blockY,
-    width: blockWidth,
-    height: blockHeight,
-    color: rgb(0.95, 0.98, 1),
-    borderColor: rgb(0.18, 0.31, 0.5),
-    borderWidth: 1,
-  });
-  lastPage.drawText("QuikSign Completion Block", {
-    x: blockX + 8,
-    y: blockY + blockHeight - 16,
-    size: 11,
-    font: bold,
-    color: rgb(0.1, 0.2, 0.38),
-  });
-  lastPage.drawText(`Envelope: ${params.envelopeTitle}`, {
-    x: blockX + 8,
-    y: blockY + blockHeight - 31,
-    size: 8,
-    font,
-  });
-  lastPage.drawText(`Completed At: ${params.completedAt.toISOString()}`, {
-    x: blockX + 8,
-    y: blockY + blockHeight - 43,
-    size: 8,
-    font,
-  });
-  const signerLine = params.signers
-    .filter((signer) => signer.signedAt)
-    .map((signer) => `${signer.role}:${signer.name}`)
-    .join(" | ");
-  lastPage.drawText(`Executed by: ${signerLine.slice(0, 220)}`, {
-    x: blockX + 8,
-    y: blockY + blockHeight - 57,
-    size: 7,
-    font,
-  });
-
-  return Buffer.from(await pdf.save());
+  return Buffer.from(
+    await pdf.save({
+      useObjectStreams: false,
+      addDefaultPage: false,
+    }),
+  );
 }
 
 /**

@@ -5,21 +5,14 @@ import { clsx } from "clsx";
 import dynamic from "next/dynamic";
 import type { DesignerField } from "@/components/envelopes/pdf-field-designer";
 import { mapApiErrorMessage } from "@/lib/client/error-messages";
-import {
-  canSignerEditField,
-  displayPrefillForSigner,
-  isSenderLockedField,
-  signingFieldBadge,
-} from "@/lib/signing/field-access";
+import { canSignerEditField, displayPrefillForSigner } from "@/lib/signing/field-access";
 import {
   uiControlClass,
-  uiGlassMutedPanelClass,
   uiGlassPanelClass,
   uiPrimaryButtonClass,
   uiSecondaryButtonXsClass,
 } from "@/lib/ui/classes";
-import { builderSplitGridClass } from "@/lib/ui/layout";
-import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import { X } from "lucide-react";
 
 const PdfFieldDesigner = dynamic(
   () => import("@/components/envelopes/pdf-field-designer").then((module) => module.PdfFieldDesigner),
@@ -163,9 +156,25 @@ function renderTextToSignatureImage(text: string, fontFamily: string, height = 9
 
 const panelClass = `${uiGlassPanelClass} space-y-3`;
 const controlClass = `${uiControlClass} py-2.5 text-[15px]`;
-const mutedCardClass = uiGlassMutedPanelClass;
 const secondaryButtonClass = uiSecondaryButtonXsClass;
 const primaryButtonClass = uiPrimaryButtonClass;
+const fileInputClass =
+  "mt-2 block w-full cursor-pointer text-sm text-body file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-white";
+
+function readUploadImageFile(
+  file: File,
+  onDataUrl: (dataUrl: string) => void,
+  onError: (message: string) => void,
+) {
+  if (!file.type.startsWith("image/")) {
+    onError("Please choose an image file (PNG, JPG, or similar).");
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = () => onDataUrl(String(reader.result ?? ""));
+  reader.onerror = () => onError("Could not read that image. Try a smaller file.");
+  reader.readAsDataURL(file);
+}
 
 export function SigningClient({ token }: { token: string }) {
   const [loading, setLoading] = useState(true);
@@ -194,8 +203,8 @@ export function SigningClient({ token }: { token: string }) {
   const [documentPageCount, setDocumentPageCount] = useState(1);
   const initialFieldPageSetRef = useRef(false);
   const previewSectionRef = useRef<HTMLDivElement | null>(null);
-  const [showPresetTools, setShowPresetTools] = useState(false);
   const [signatureModalOpen, setSignatureModalOpen] = useState(false);
+  const [signatureModalFocus, setSignatureModalFocus] = useState<"sign" | "seal">("sign");
   const [declineModalOpen, setDeclineModalOpen] = useState(false);
   const [draftSignatureType, setDraftSignatureType] = useState<"DRAW" | "TYPE" | "UPLOAD">("TYPE");
   const [draftSignatureText, setDraftSignatureText] = useState("");
@@ -249,8 +258,6 @@ export function SigningClient({ token }: { token: string }) {
     () => myFieldsOrdered.filter((field) => field.required !== false && !completedFieldIds.has(field.id)).length,
     [completedFieldIds, myFieldsOrdered],
   );
-
-  const activeField = myFieldsOrdered[activeFieldIndex] ?? null;
 
   const fieldsOnWrongPage = useMemo(
     () => myEditableFields.filter((field) => field.page > documentPageCount),
@@ -331,30 +338,6 @@ export function SigningClient({ token }: { token: string }) {
     initialFieldPageSetRef.current = true;
   }, [envelope, goToPreviewPage, myFieldPages, myEditableFields]);
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      const isTypingTarget =
-        target instanceof HTMLInputElement ||
-        target instanceof HTMLTextAreaElement ||
-        target instanceof HTMLSelectElement ||
-        Boolean(target?.isContentEditable);
-      if (isTypingTarget || signatureModalOpen || declineModalOpen) {
-        return;
-      }
-      if (event.key === "ArrowLeft" || event.key === "PageUp") {
-        event.preventDefault();
-        goToPreviewPage(Math.max(1, previewPage - 1));
-      }
-      if (event.key === "ArrowRight" || event.key === "PageDown") {
-        event.preventDefault();
-        goToPreviewPage(Math.min(documentPageCount, previewPage + 1));
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [declineModalOpen, documentPageCount, goToPreviewPage, previewPage, signatureModalOpen]);
-
   const openFieldForSigning = useCallback(
     (field: DesignerField) => {
       if (!activeSignerEmail || !canSignerEditField(field, activeSignerEmail) || !field.id) {
@@ -362,12 +345,13 @@ export function SigningClient({ token }: { token: string }) {
       }
       setActiveFieldId(field.id);
       if (field.type === "SEAL" || field.valueType === "STAMP") {
-        setSignatureType("UPLOAD");
+        setSignatureModalFocus("seal");
+        setDraftSignatureType("UPLOAD");
         setSignatureModalOpen(true);
         return;
       }
       if (field.type === "SIGNATURE" || field.type === "INITIAL") {
-        setSignatureType((current) => (current === "UPLOAD" ? "TYPE" : current));
+        setSignatureModalFocus("sign");
         setSignatureModalOpen(true);
         return;
       }
@@ -412,7 +396,13 @@ export function SigningClient({ token }: { token: string }) {
       const incomingSignatureValue = signatureValue;
       const incomingIsImage = isImageLikeValue(incomingSignatureValue);
       const nextType =
-        signatureType === "TYPE" && incomingIsImage ? "DRAW" : signatureType === "UPLOAD" && !incomingIsImage ? "TYPE" : signatureType;
+        signatureModalFocus === "seal"
+          ? "UPLOAD"
+          : signatureType === "TYPE" && incomingIsImage
+            ? "DRAW"
+            : signatureType === "UPLOAD"
+              ? "UPLOAD"
+              : signatureType;
 
       setDraftSignatureType(nextType);
       setDraftSignatureValue(incomingSignatureValue);
@@ -427,7 +417,17 @@ export function SigningClient({ token }: { token: string }) {
         setDraftFontStyle(presetMatch.fontStyle);
       }
     });
-  }, [activeSigner?.name, initialValue, isImageLikeValue, presets, sealValue, signatureModalOpen, signatureType, signatureValue]);
+  }, [
+    activeSigner?.name,
+    initialValue,
+    isImageLikeValue,
+    presets,
+    sealValue,
+    signatureModalFocus,
+    signatureModalOpen,
+    signatureType,
+    signatureValue,
+  ]);
 
   useEffect(() => {
     const load = async () => {
@@ -506,75 +506,6 @@ export function SigningClient({ token }: { token: string }) {
     void loadPresets();
   }, [presetTouched, token]);
 
-  const applyPreset = () => {
-    const preset = presets.find((entry) => entry.id === selectedPresetId);
-    if (!preset) {
-      return;
-    }
-    if (preset.signatureValue) {
-      setSignatureValue(preset.signatureValue);
-      setDraftSignatureValue(preset.signatureValue);
-    }
-    if (preset.initialValue) {
-      setInitialValue(preset.initialValue);
-      setDraftInitialValue(preset.initialValue);
-    }
-    if (preset.sealValue) {
-      setSealValue(preset.sealValue);
-      setDraftSealValue(preset.sealValue);
-    }
-    if (preset.fontStyle) {
-      setDraftFontStyle(preset.fontStyle);
-    }
-    setPresetLabel(preset.label);
-    setStatusMessage(`Preset "${preset.label}" applied.`);
-    setPresetTouched(true);
-  };
-
-  const savePreset = async () => {
-    if (!signatureValue.trim() && !initialValue.trim() && !sealValue.trim()) {
-      setStatusMessage("Add a signature, initial, or stamp before saving a preset.");
-      return;
-    }
-    setSubmitting(true);
-    setStatusMessage("");
-    try {
-      const response = await fetch("/api/sign/presets", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          token,
-          label: presetLabel.trim() || "My Default",
-          signatureValue: signatureValue || undefined,
-          initialValue: initialValue || undefined,
-          sealValue: sealValue || undefined,
-          fontStyle: draftFontStyle || undefined,
-        }),
-      });
-      const data = (await response.json()) as {
-        error?: string;
-        preset?: SigningPreset;
-      };
-      if (!response.ok) {
-        throw new Error(mapApiErrorMessage(data.error ?? "Unable to save preset"));
-      }
-      const nextPreset = data.preset;
-      if (nextPreset) {
-        setPresets((current) => {
-          const withoutCurrent = current.filter((entry) => entry.id !== nextPreset.id);
-          return [nextPreset, ...withoutCurrent];
-        });
-        setSelectedPresetId(nextPreset.id);
-        setPresetTouched(true);
-      }
-      setStatusMessage(`Preset "${presetLabel}" saved.`);
-    } catch (error) {
-      setStatusMessage(mapApiErrorMessage((error as Error).message));
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
   const autoSavePreset = useCallback(
     async (input: { signature?: string; initial?: string; seal?: string; font?: string }) => {
       try {
@@ -606,97 +537,6 @@ export function SigningClient({ token }: { token: string }) {
     },
     [activeSigner, token],
   );
-
-  const renamePreset = async () => {
-    if (!selectedPresetId || presetLabel.trim().length < 2) {
-      return;
-    }
-    setSubmitting(true);
-    setStatusMessage("");
-    try {
-      const response = await fetch("/api/sign/presets", {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          token,
-          presetId: selectedPresetId,
-          label: presetLabel.trim(),
-        }),
-      });
-      const data = (await response.json()) as { error?: string; preset?: SigningPreset };
-      if (!response.ok) {
-        throw new Error(mapApiErrorMessage(data.error ?? "Unable to rename preset"));
-      }
-      const updated = data.preset;
-      if (updated) {
-        setPresets((current) => current.map((entry) => (entry.id === updated.id ? updated : entry)));
-      }
-      setStatusMessage("Preset renamed.");
-    } catch (error) {
-      setStatusMessage(mapApiErrorMessage((error as Error).message));
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const deletePreset = async () => {
-    if (!selectedPresetId) {
-      return;
-    }
-    setSubmitting(true);
-    setStatusMessage("");
-    try {
-      const response = await fetch("/api/sign/presets", {
-        method: "DELETE",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          token,
-          presetId: selectedPresetId,
-        }),
-      });
-      const data = (await response.json()) as { error?: string };
-      if (!response.ok) {
-        throw new Error(mapApiErrorMessage(data.error ?? "Unable to delete preset"));
-      }
-      setPresets((current) => current.filter((entry) => entry.id !== selectedPresetId));
-      setSelectedPresetId("");
-      setStatusMessage("Preset deleted.");
-    } catch (error) {
-      setStatusMessage(mapApiErrorMessage((error as Error).message));
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const setDefaultPreset = async () => {
-    if (!selectedPresetId) {
-      return;
-    }
-    setSubmitting(true);
-    setStatusMessage("");
-    try {
-      const response = await fetch("/api/sign/presets", {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          token,
-          presetId: selectedPresetId,
-        }),
-      });
-      const data = (await response.json()) as { error?: string; presets?: SigningPreset[] };
-      if (!response.ok) {
-        throw new Error(mapApiErrorMessage(data.error ?? "Unable to set default preset"));
-      }
-      if (data.presets) {
-        setPresets(data.presets);
-      }
-      setStatusMessage("Default preset updated.");
-    } catch (error) {
-      setStatusMessage(mapApiErrorMessage((error as Error).message));
-    } finally {
-      setSubmitting(false);
-    }
-  };
 
   const submitSign = async () => {
     if (!consentAccepted) {
@@ -1006,99 +846,57 @@ export function SigningClient({ token }: { token: string }) {
     );
   }
 
-  const totalAssignedFields = myFieldsOrdered.length;
-  const filledFields = totalAssignedFields - fieldsRemaining;
-  const progressPct = totalAssignedFields === 0 ? 100 : Math.round((filledFields / totalAssignedFields) * 100);
+  const isApprover = activeSigner?.role === "APPROVER";
+  const finishLabel = isApprover ? "Approve" : "Finish signing";
+
+  const clickedFieldForModal = activeFieldId
+    ? envelope.fields.find((field) => field.id === activeFieldId)
+    : undefined;
+
+  const signatureOkRequired =
+    signatureModalFocus === "sign" &&
+    requiresSignature &&
+    (fillSignatureEverywhere ||
+      !clickedFieldForModal ||
+      clickedFieldForModal.type === "SIGNATURE" ||
+      clickedFieldForModal.type === "INITIAL");
+
+  const sealOkRequired =
+    requiresSeal &&
+    (signatureModalFocus === "seal" ||
+      fillSignatureEverywhere ||
+      !clickedFieldForModal ||
+      clickedFieldForModal.type === "SEAL");
+
+  const hasSignatureInput =
+    draftSignatureType === "TYPE"
+      ? draftSignatureText.trim().length > 0 || draftInitialText.trim().length > 0
+      : isImageLikeValue(draftSignatureValue) || isImageLikeValue(draftInitialValue);
+
+  const signatureModalOkDisabled =
+    (signatureOkRequired && !hasSignatureInput) || (sealOkRequired && draftSealValue.trim().length === 0);
 
   return (
-    <div className="space-y-4">
-      {workflowClosed && (
-        <div className="rounded-2xl border border-border bg-surface p-3 text-sm text-text shadow-sm dark:border-white/10 dark:bg-surface/70 dark:backdrop-blur-md">
-          <p className="font-semibold text-text">Workflow closed</p>
-          <p className="mt-1 text-body">
-            This signing workflow is closed for this token (completed/declined/voided). Further actions are disabled.
-          </p>
-        </div>
-      )}
-
-      <div className="sticky top-[var(--app-header-height)] z-30 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface/95 px-3 py-3 text-sm shadow-sm backdrop-blur sm:px-4 dark:border-white/10 dark:bg-surface/80">
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-text">{envelope.title}</p>
-            <p className="truncate text-[11px] text-muted">
-              Signing as {activeSigner?.name ?? "Unknown"} · {activeSigner?.email ?? ""}
-            </p>
-          </div>
-          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${fieldsRemaining === 0 ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300" : "bg-amber-500/15 text-amber-800 dark:text-amber-200"}`}>
-            {fieldsRemaining === 0
-              ? "All fields ready"
-              : `${fieldsRemaining} of ${totalAssignedFields} left`}
-          </span>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <a
-            href={documentProxyUrl}
-            target="_blank"
-            rel="noreferrer"
-            className={`${secondaryButtonClass} text-xs`}
-            title="Download original PDF"
-          >
-            Download
-          </a>
-          <button
-            type="button"
-            onClick={() => setDeclineModalOpen(true)}
-            disabled={workflowClosed}
-            className="rounded-lg border border-rose-300/60 bg-rose-500/10 px-3 py-2 text-xs font-semibold text-rose-700 shadow-sm transition hover:bg-rose-500/20 disabled:opacity-60 dark:text-rose-300"
-          >
-            Decline
-          </button>
-          <button
-            type="button"
-            onClick={submitSign}
-            disabled={submitting || workflowClosed || activeSigner?.role === "APPROVER" || !consentAccepted}
-            title={!consentAccepted ? "Agree to the disclosure first" : fieldsRemaining > 0 ? "Some fields are unfilled" : "Submit signing"}
-            className={`${primaryButtonClass} text-xs`}
-          >
-            {fieldsRemaining > 0 ? `Next field (${fieldsRemaining} left)` : "Finish signing"}
-          </button>
-        </div>
-      </div>
-
-      {!consentAccepted && !workflowClosed ? (
-        <div className="flex flex-col gap-3 rounded-2xl border border-emerald-500/40 bg-emerald-500/10 p-3 text-sm text-text shadow-sm sm:flex-row sm:items-center sm:justify-between">
-          <label className="flex flex-wrap items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={consentAccepted}
-              onChange={(event) => setConsentAccepted(event.target.checked)}
-              className="h-4 w-4 align-middle"
-            />
-            <span>
-              I confirm that I have read and understood the{" "}
-              <button type="button" onClick={() => setDisclosureOpen(true)} className="underline underline-offset-2 hover:text-primary">
-                Electronic Record and Signature Disclosure
-              </button>{" "}
-              and consent to use electronic records and signatures.
-            </span>
-          </label>
-          <button
-            type="button"
-            onClick={() => {
-              setConsentAccepted(true);
-              goToNextRemainingField();
-            }}
-            className={`${primaryButtonClass} sm:min-w-44 justify-center`}
-          >
-            Agree & Continue
-          </button>
+    <div className="flex min-h-[calc(100dvh-var(--app-header-height)-2rem)] flex-col gap-3 pb-28">
+      {workflowClosed ? (
+        <div className="rounded-xl border border-border bg-surface px-3 py-2 text-sm text-body">
+          This document is closed. You cannot sign or decline again.
         </div>
       ) : null}
 
+      {statusMessage ? (
+        <p className="rounded-xl border border-border bg-surface px-3 py-2 text-sm text-body">{statusMessage}</p>
+      ) : null}
+
       {showMissingFieldsBanner && fieldsRemaining > 0 ? (
-        <div className="flex items-center justify-between gap-3 rounded-xl border border-rose-300/70 bg-rose-500/15 px-3 py-2 text-xs text-rose-800 dark:text-rose-200">
-          <span className="font-semibold">Some fields are left unfilled.</span>
-          <button type="button" onClick={() => setShowMissingFieldsBanner(false)} aria-label="Dismiss" className="rounded p-1 text-danger hover:bg-danger/10">
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-400/60 bg-amber-500/10 px-3 py-2 text-sm text-amber-950 dark:text-amber-100">
+          <span>Tap each highlighted field on the document to complete it.</span>
+          <button
+            type="button"
+            onClick={() => setShowMissingFieldsBanner(false)}
+            aria-label="Dismiss"
+            className="rounded p-1 hover:bg-amber-500/20"
+          >
             <X className="h-4 w-4" aria-hidden />
           </button>
         </div>
@@ -1106,324 +904,121 @@ export function SigningClient({ token }: { token: string }) {
 
       {fieldsOnWrongPage.length > 0 ? (
         <div className="rounded-xl border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-100">
-          <p className="font-medium">Page mismatch</p>
-          <p className="mt-1">
-            Your signature is on page {fieldsOnWrongPage.map((f) => f.page).join(", ")}, but this preview only has{" "}
-            {documentPageCount} page{documentPageCount === 1 ? "" : "s"}.
-            {envelope.documentPageCount && envelope.documentPageCount > documentPageCount
-              ? ` The stored document reports ${envelope.documentPageCount} pages — try refreshing or use Open Raw PDF.`
-              : " Use the Download button to view the full document, or ask the sender to upload the file as a PDF for an accurate layout."}
-          </p>
-        </div>
-      ) : envelope.documentConversionMethod === "text-fallback" ? (
-        <div className="rounded-xl border border-border bg-bg px-3 py-2 text-xs text-body">
-          This document was converted from Word with a text-only fallback. Page breaks may differ from Microsoft Word.
-          For a faithful layout, ask the sender to upload the file as a PDF.
+          Some fields reference pages not shown in preview. Use Download to view the full PDF.
         </div>
       ) : null}
 
-      <div className={builderSplitGridClass}>
-        <div ref={previewSectionRef} className={clsx(panelClass, "min-w-0")}>
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs font-medium text-text">Document preview</p>
-            <p className="text-[10px] text-muted">
-              Page {previewPage} of {documentPageCount}
-              {documentPageCount > 1 ? " · Use arrow keys or Page Up/Down to change page" : ""}
-            </p>
-          </div>
-          {myFieldPages.length > 0 ? (
-            <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
-              <span className="font-medium text-text">Your fields on:</span>
-              {myFieldPages.map((pageNumber) => (
-                <button
-                  key={`jump-page-${pageNumber}`}
-                  type="button"
-                  onClick={() => goToPreviewPage(pageNumber)}
-                  className={`rounded-full border px-2.5 py-1 font-medium transition ${
-                    previewPage === pageNumber
-                      ? "border-primary bg-primary text-white"
-                      : "border-border bg-surface text-text hover:bg-surface/95"
-                  }`}
-                >
-                  Page {pageNumber}
-                </button>
-              ))}
-            </div>
-          ) : null}
-          <PdfFieldDesigner
-            readOnly
-            minimalViewerChrome
-            showZoomControls
-            fieldLabelMode="clean"
-            signingViewEmail={activeSignerEmail}
-            documentUrl={documentProxyUrl}
-            selectedSignerEmail={activeSignerEmail}
-            placementPage={previewPage}
-            fields={designerFields}
-            selectedFieldType={"SIGNATURE"}
-            onAddField={() => {}}
-            onUpdateField={() => {}}
-            onDeleteField={() => {}}
-            onClearPage={() => {}}
-            onUndo={() => {}}
-            canUndo={false}
-            onReadOnlyFieldClick={openFieldForSigning}
-            onPlacementPageChange={goToPreviewPage}
-            onPageBounds={(numPages) => {
-              setDocumentPageCount(numPages);
-              if (previewPage > numPages) {
-                goToPreviewPage(numPages);
-              }
-            }}
-          />
-        </div>
+      <div ref={previewSectionRef} className={clsx(panelClass, "min-w-0 flex-1")}>
+        {!consentAccepted && !workflowClosed ? (
+          <p className="mb-3 text-sm text-body">
+            Scroll through the document below. Agree to sign at the bottom, then tap each field on the page to fill it.
+          </p>
+        ) : fieldsRemaining > 0 && !isApprover ? (
+          <p className="mb-3 text-sm text-muted">Tap the highlighted fields on the document to sign or enter information.</p>
+        ) : null}
+        <PdfFieldDesigner
+          readOnly
+          minimalViewerChrome
+          showZoomControls
+          fieldLabelMode="clean"
+          signingViewEmail={activeSignerEmail}
+          documentUrl={documentProxyUrl}
+          selectedSignerEmail={activeSignerEmail}
+          placementPage={previewPage}
+          fields={designerFields}
+          selectedFieldType={"SIGNATURE"}
+          onAddField={() => {}}
+          onUpdateField={() => {}}
+          onDeleteField={() => {}}
+          onClearPage={() => {}}
+          onUndo={() => {}}
+          canUndo={false}
+          onReadOnlyFieldClick={openFieldForSigning}
+          onPlacementPageChange={goToPreviewPage}
+          onPageBounds={(numPages) => {
+            setDocumentPageCount(numPages);
+            if (previewPage > numPages) {
+              goToPreviewPage(numPages);
+            }
+          }}
+        />
+      </div>
 
-        <aside className="space-y-3 lg:sticky lg:top-32 lg:self-start">
-          <div className={panelClass}>
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-label uppercase">Progress</p>
-              <span className="text-xs font-medium text-text">
-                {filledFields}/{totalAssignedFields}
-              </span>
-            </div>
-            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-bg">
-              <div
-                className="h-full rounded-full bg-primary transition-all"
-                style={{ width: `${progressPct}%` }}
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface/95 px-4 py-3 shadow-[0_-4px_24px_rgba(0,0,0,0.08)] backdrop-blur-md dark:bg-surface/90">
+        <div className="mx-auto flex w-full max-w-6xl flex-col gap-3">
+          {isApprover ? (
+            <label className="block text-sm text-body">
+              Note (optional)
+              <textarea
+                value={approvalNote}
+                onChange={(event) => setApprovalNote(event.target.value)}
+                placeholder="Optional message to sender"
+                rows={2}
+                className={`${controlClass} mt-1`}
               />
-            </div>
-            {myFieldsOrdered.length > 0 ? (
-              <div className="mt-3 flex gap-2">
+            </label>
+          ) : (
+            <label className="flex items-start gap-2 text-xs text-body sm:text-sm">
+              <input
+                type="checkbox"
+                checked={consentAccepted}
+                onChange={(event) => setConsentAccepted(event.target.checked)}
+                className="mt-0.5 h-4 w-4 shrink-0"
+              />
+              <span>
+                I agree to sign electronically and accept the{" "}
                 <button
                   type="button"
-                  onClick={() => goToField(activeFieldIndex - 1)}
-                  className={`${secondaryButtonClass} flex-1 justify-center text-xs`}
+                  onClick={() => setDisclosureOpen(true)}
+                  className="font-medium text-primary underline underline-offset-2"
                 >
-                  <ChevronLeft className="h-4 w-4" aria-hidden />
-                  Previous
+                  disclosure
                 </button>
+                .
+              </span>
+            </label>
+          )}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="truncate text-sm font-medium text-text">{envelope.title}</p>
+            <div className="flex shrink-0 items-center gap-2">
+              <a
+                href={documentProxyUrl}
+                target="_blank"
+                rel="noreferrer"
+                className={`${secondaryButtonClass} hidden text-xs sm:inline-flex`}
+              >
+                Download
+              </a>
+              <button
+                type="button"
+                onClick={() => setDeclineModalOpen(true)}
+                disabled={workflowClosed}
+                className="rounded-lg border border-rose-300/60 px-4 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-500/10 disabled:opacity-50 dark:text-rose-300"
+              >
+                Decline
+              </button>
+              {isApprover ? (
                 <button
                   type="button"
-                  onClick={() => goToField(activeFieldIndex + 1)}
-                  className={`${secondaryButtonClass} flex-1 justify-center text-xs`}
-                >
-                  Next
-                  <ChevronRight className="h-4 w-4" aria-hidden />
-                </button>
-              </div>
-            ) : null}
-          </div>
-
-          <div className={panelClass}>
-            {activeSigner?.role === "APPROVER" ? (
-              <>
-                <h3 className="text-sm font-semibold text-text">Approval action</h3>
-                <p className="mt-1 text-xs text-body">You are assigned as an approver for this envelope.</p>
-                <label className="mt-2 block text-sm text-body">
-                  Approval note (optional)
-                  <textarea
-                    value={approvalNote}
-                    onChange={(event) => setApprovalNote(event.target.value)}
-                    placeholder="Optional decision note"
-                    rows={4}
-                    className={controlClass}
-                  />
-                </label>
-                <button
-                  disabled={submitting || workflowClosed}
                   onClick={submitApprove}
-                  className="mt-3 w-full rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-500 disabled:opacity-60"
+                  disabled={submitting || workflowClosed}
+                  className={`${primaryButtonClass} py-2`}
                 >
-                  Approve envelope
+                  {submitting ? "Submitting…" : finishLabel}
                 </button>
-              </>
-            ) : (
-              <>
-                <h3 className="text-sm font-semibold text-text">Current field</h3>
-                {activeField ? (
-                  <div className="mt-2 rounded-xl border border-border bg-bg p-3 text-xs">
-                    <p className="font-medium text-text">
-                      {activeField.label?.trim() ||
-                        (activeField.type === "SEAL"
-                          ? "Stamp"
-                          : activeField.type === "SIGNATURE"
-                            ? "Signature"
-                            : activeField.type === "INITIAL"
-                              ? "Initial"
-                              : activeField.type.replaceAll("_", " "))}
-                    </p>
-                    <p className="mt-0.5 text-muted">
-                      Page {activeField.page} ·{" "}
-                      {completedFieldIds.has(activeField.id)
-                        ? "Filled"
-                        : activeField.required !== false
-                          ? "Required"
-                          : "Optional"}
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        openFieldForSigning(toDesignerField(activeField, activeSignerEmail, fieldPreviewOverrides))
-                      }
-                      className={`${primaryButtonClass} mt-2 w-full justify-center text-xs`}
-                      disabled={submitting || workflowClosed}
-                    >
-                      {activeField.type === "SEAL"
-                        ? "Add stamp"
-                        : activeField.type === "CHECKBOX"
-                          ? completedFieldIds.has(activeField.id)
-                            ? "Toggle checkbox"
-                            : "Check this box"
-                          : activeField.type === "SIGNATURE" || activeField.type === "INITIAL"
-                            ? completedFieldIds.has(activeField.id)
-                              ? "Update signature"
-                              : "Add signature"
-                            : completedFieldIds.has(activeField.id)
-                              ? "Edit value"
-                              : "Enter value"}
-                    </button>
-                  </div>
-                ) : (
-                  <p className="mt-2 text-xs text-body">No fields are assigned to you for this envelope.</p>
-                )}
+              ) : (
                 <button
                   type="button"
-                  onClick={() => setShowPresetTools((current) => !current)}
-                  className={`${secondaryButtonClass} mt-3 w-full justify-center text-xs`}
+                  onClick={submitSign}
+                  disabled={submitting || workflowClosed || !consentAccepted}
+                  className={`${primaryButtonClass} py-2`}
                 >
-                  {showPresetTools ? "Hide saved signatures" : "Use saved signature"}
+                  {submitting ? "Submitting…" : finishLabel}
                 </button>
-
-                {showPresetTools ? (
-                  <div className={`${mutedCardClass} mt-3`}>
-                    <p className="text-xs font-medium text-text">Saved presets</p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      <select
-                        value={selectedPresetId}
-                        onChange={(event) => {
-                          setSelectedPresetId(event.target.value);
-                          setPresetTouched(true);
-                        }}
-                        className="min-w-32 flex-1 rounded-lg border border-border bg-bg px-2 py-2 text-xs text-text"
-                      >
-                        <option value="">Select preset</option>
-                        {presets.map((preset) => (
-                          <option key={preset.id} value={preset.id}>
-                            {preset.isDefault ? `${preset.label} (Default)` : preset.label}
-                          </option>
-                        ))}
-                      </select>
-                      <button type="button" disabled={submitting || !selectedPresetId} onClick={applyPreset} className={`${secondaryButtonClass} text-xs`}>
-                        Apply
-                      </button>
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      <input
-                        value={presetLabel}
-                        onChange={(event) => setPresetLabel(event.target.value)}
-                        placeholder="Preset label"
-                        className="min-w-32 flex-1 rounded-lg border border-border bg-bg px-2 py-2 text-xs text-text"
-                      />
-                      <button type="button" disabled={submitting || presetLabel.trim().length < 2} onClick={savePreset} className={`${secondaryButtonClass} text-xs`}>
-                        Save
-                      </button>
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        disabled={submitting || !selectedPresetId || presetLabel.trim().length < 2}
-                        onClick={renamePreset}
-                        className={`${secondaryButtonClass} text-xs`}
-                      >
-                        Rename
-                      </button>
-                      <button
-                        type="button"
-                        disabled={submitting || !selectedPresetId}
-                        onClick={setDefaultPreset}
-                        className={`${secondaryButtonClass} text-xs`}
-                      >
-                        Set default
-                      </button>
-                      <button
-                        type="button"
-                        disabled={submitting || !selectedPresetId}
-                        onClick={deletePreset}
-                        className="rounded-lg border border-rose-300/60 bg-rose-500/10 px-3 py-2 text-xs font-medium text-rose-700 shadow-sm transition hover:bg-rose-500/20 disabled:opacity-60 dark:text-rose-300"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                ) : null}
-              </>
-            )}
-          </div>
-
-          {envelope.fields.length > 0 ? (
-            <div className={panelClass}>
-              <div className="flex items-center justify-between">
-                <p className="text-label uppercase">Fields ({envelope.fields.length})</p>
-                <div className="flex gap-1 text-[9px] text-muted">
-                  <span className="rounded-full border border-primary/40 bg-primary/10 px-1.5 py-0.5 text-primary">Yours</span>
-                  <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-1.5 py-0.5 text-emerald-700">Filled</span>
-                </div>
-              </div>
-              <div className="mt-2 max-h-none space-y-1.5 pr-1 lg:max-h-56 lg:overflow-y-auto lg:overscroll-contain">
-                {envelope.fields.map((field, index) => {
-                  const locked = isSenderLockedField(field);
-                  const editable = canSignerEditField(field, activeSignerEmail);
-                  const badge = signingFieldBadge(field, activeSignerEmail);
-                  const completed = completedFieldIds.has(field.id);
-                  const myIndex = myFieldsOrdered.findIndex((entry) => entry.id === field.id);
-                  const isActive = editable && myIndex === activeFieldIndex;
-                  return (
-                    <button
-                      key={`${field.id}-${index}`}
-                      type="button"
-                      disabled={!editable}
-                      onClick={() => {
-                        if (myIndex >= 0) {
-                          goToField(myIndex);
-                        } else {
-                          goToPreviewPage(field.page);
-                        }
-                        openFieldForSigning(toDesignerField(field, activeSignerEmail, fieldPreviewOverrides));
-                      }}
-                      className={`w-full rounded-lg border px-2 py-1.5 text-left text-[11px] transition ${
-                        locked
-                          ? "cursor-default border-amber-500/40 bg-amber-500/10 text-text"
-                          : editable
-                            ? completed
-                              ? "border-emerald-500/50 bg-emerald-500/10 text-text"
-                              : isActive
-                                ? "border-primary bg-primary/10 text-text ring-2 ring-primary/40"
-                                : "border-border bg-bg text-text hover:bg-surface"
-                            : "cursor-default border-border/60 bg-bg text-muted opacity-80"
-                      }`}
-                    >
-                      <p className="truncate font-medium">
-                        {field.label?.trim() ||
-                          (field.type === "SIGNATURE"
-                            ? "Signature"
-                            : field.type === "INITIAL"
-                              ? "Initial"
-                              : field.type === "SEAL"
-                                ? "Stamp"
-                                : field.type.replaceAll("_", " "))}
-                        {field.required !== false ? " · Required" : ""}
-                      </p>
-                      <p className="mt-0.5 truncate text-[10px] text-muted">
-                        {badge} · p{field.page}
-                        {completed ? " · Filled" : locked ? " · Locked" : ""}
-                      </p>
-                    </button>
-                  );
-                })}
-              </div>
+              )}
             </div>
-          ) : null}
-        </aside>
+          </div>
+        </div>
       </div>
 
       {disclosureOpen ? (
@@ -1529,43 +1124,74 @@ export function SigningClient({ token }: { token: string }) {
       {signatureModalOpen && activeSigner?.role !== "APPROVER" ? (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/45 p-4">
           <div className="w-full max-w-3xl overflow-hidden rounded-2xl border border-border bg-surface shadow-xl">
-            <div className="flex items-center gap-6 border-b border-border px-5 pt-4">
-              {[
-                { id: "TYPE" as const, label: "TYPE", icon: (
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 7 4 4 20 4 20 7" /><line x1="9" y1="20" x2="15" y2="20" /><line x1="12" y1="4" x2="12" y2="20" /></svg>
-                ) },
-                { id: "DRAW" as const, label: "DRAW", icon: (
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z" /><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" /><path d="M2 2l7.586 7.586" /><circle cx="11" cy="11" r="2" /></svg>
-                ) },
-                { id: "UPLOAD" as const, label: "UPLOAD", icon: (
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></svg>
-                ) },
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setDraftSignatureType(tab.id)}
-                  className={`-mb-px flex flex-col items-center gap-1 border-b-2 px-1 pb-2 pt-1 text-[11px] font-semibold tracking-wider transition ${
-                    draftSignatureType === tab.id
-                      ? "border-primary text-primary"
-                      : "border-transparent text-muted hover:text-text"
-                  }`}
-                >
-                  <span className={`flex h-6 w-6 items-center justify-center ${draftSignatureType === tab.id ? "text-primary" : "text-muted"}`}>{tab.icon}</span>
-                  {tab.label}
-                </button>
-              ))}
+            <div className="flex items-center gap-4 border-b border-border px-5 py-4">
+              {signatureModalFocus === "sign" ? (
+                [
+                  { id: "TYPE" as const, label: "TYPE" },
+                  { id: "DRAW" as const, label: "DRAW" },
+                  { id: "UPLOAD" as const, label: "UPLOAD" },
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setDraftSignatureType(tab.id)}
+                    className={`-mb-px border-b-2 px-2 pb-1 text-[11px] font-semibold tracking-wider transition ${
+                      draftSignatureType === tab.id
+                        ? "border-primary text-primary"
+                        : "border-transparent text-muted hover:text-text"
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))
+              ) : (
+                <h3 className="text-base font-semibold text-text">Upload stamp</h3>
+              )}
               <button
                 type="button"
                 onClick={() => setSignatureModalOpen(false)}
-                aria-label="Close signature picker"
-                className="ml-auto mb-2 text-muted transition hover:text-text"
+                aria-label="Close"
+                className="ml-auto text-muted transition hover:text-text"
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
               </button>
             </div>
 
             <div className="max-h-[68vh] overflow-y-auto px-5 py-4">
+              {signatureModalFocus === "seal" ? (
+                <div className="space-y-4">
+                  <p className="text-sm text-body">Choose a stamp image (PNG or JPG). It will be placed on the stamp field you selected.</p>
+                  <label className="block rounded-xl border border-border bg-bg p-4 text-sm text-body">
+                    <span className="font-medium text-text">Stamp image</span>
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/jpg,image/webp,image/gif"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (!file) return;
+                        readUploadImageFile(
+                          file,
+                          (dataUrl) => setDraftSealValue(dataUrl),
+                          (message) => setStatusMessage(message),
+                        );
+                        event.currentTarget.value = "";
+                      }}
+                      className={fileInputClass}
+                    />
+                    {draftSealValue && isImageLikeValue(draftSealValue) ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={draftSealValue}
+                        alt="Stamp preview"
+                        className="mx-auto mt-4 max-h-32 rounded border border-border bg-white object-contain p-2"
+                      />
+                    ) : null}
+                  </label>
+                </div>
+              ) : null}
+
+              {signatureModalFocus === "sign" ? (
+              <>
               {draftSignatureType === "TYPE" ? (
                 <div className="space-y-4">
                   <div className="grid gap-3 sm:grid-cols-2">
@@ -1693,16 +1319,18 @@ export function SigningClient({ token }: { token: string }) {
                     <span className="mb-2 block text-xs font-medium text-text">Signature image</span>
                     <input
                       type="file"
-                      accept="image/*"
+                      accept="image/png,image/jpeg,image/jpg,image/webp,image/gif"
                       onChange={(event) => {
                         const file = event.target.files?.[0];
                         if (!file) return;
-                        const reader = new FileReader();
-                        reader.onload = () => setDraftSignatureValue(String(reader.result ?? ""));
-                        reader.readAsDataURL(file);
+                        readUploadImageFile(
+                          file,
+                          (dataUrl) => setDraftSignatureValue(dataUrl),
+                          (message) => setStatusMessage(message),
+                        );
                         event.currentTarget.value = "";
                       }}
-                      className={controlClass}
+                      className={fileInputClass}
                     />
                     {draftSignatureValue && isImageLikeValue(draftSignatureValue) ? (
                       // eslint-disable-next-line @next/next/no-img-element
@@ -1710,19 +1338,21 @@ export function SigningClient({ token }: { token: string }) {
                     ) : null}
                   </label>
                   <label className="rounded-xl border border-border bg-bg p-3 text-sm text-body">
-                    <span className="mb-2 block text-xs font-medium text-text">Initial image</span>
+                    <span className="mb-2 block text-xs font-medium text-text">Initial image (optional)</span>
                     <input
                       type="file"
-                      accept="image/*"
+                      accept="image/png,image/jpeg,image/jpg,image/webp,image/gif"
                       onChange={(event) => {
                         const file = event.target.files?.[0];
                         if (!file) return;
-                        const reader = new FileReader();
-                        reader.onload = () => setDraftInitialValue(String(reader.result ?? ""));
-                        reader.readAsDataURL(file);
+                        readUploadImageFile(
+                          file,
+                          (dataUrl) => setDraftInitialValue(dataUrl),
+                          (message) => setStatusMessage(message),
+                        );
                         event.currentTarget.value = "";
                       }}
-                      className={controlClass}
+                      className={fileInputClass}
                     />
                     {draftInitialValue && isImageLikeValue(draftInitialValue) ? (
                       // eslint-disable-next-line @next/next/no-img-element
@@ -1732,44 +1362,50 @@ export function SigningClient({ token }: { token: string }) {
                 </div>
               ) : null}
 
-              {requiresSeal ? (
-                <details className="mt-4 rounded-xl border border-border bg-bg p-3">
-                  <summary className="cursor-pointer text-sm font-semibold text-text">Add stamp (required for this envelope)</summary>
-                  <div className="mt-3 space-y-3">
-                    <label className="block text-sm text-body">
-                      Upload stamp image
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(event) => {
-                          const file = event.target.files?.[0];
-                          if (!file) return;
-                          const reader = new FileReader();
-                          reader.onload = () => setDraftSealValue(String(reader.result ?? ""));
-                          reader.readAsDataURL(file);
-                          event.currentTarget.value = "";
-                        }}
-                        className={controlClass}
-                      />
-                    </label>
+              {requiresSeal && signatureModalFocus === "sign" ? (
+                <div className="mt-4 rounded-xl border border-border bg-bg p-4">
+                  <p className="text-sm font-semibold text-text">Stamp</p>
+                  <p className="mt-1 text-xs text-muted">Upload a stamp image if this document includes stamp fields.</p>
+                  <label className="mt-3 block text-sm text-body">
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/jpg,image/webp,image/gif"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (!file) return;
+                        readUploadImageFile(
+                          file,
+                          (dataUrl) => setDraftSealValue(dataUrl),
+                          (message) => setStatusMessage(message),
+                        );
+                        event.currentTarget.value = "";
+                      }}
+                      className={fileInputClass}
+                    />
                     {draftSealValue && isImageLikeValue(draftSealValue) ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={draftSealValue} alt="stamp preview" className="mt-1 max-h-24 rounded border border-border bg-white object-contain p-2" />
+                      <img src={draftSealValue} alt="stamp preview" className="mt-3 max-h-24 rounded border border-border bg-white object-contain p-2" />
                     ) : null}
-                  </div>
-                </details>
+                  </label>
+                </div>
+              ) : null}
+              </>
               ) : null}
             </div>
 
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border bg-bg/40 px-5 py-3">
-              <label className="flex items-center gap-2 text-xs text-body">
-                <input
-                  type="checkbox"
-                  checked={fillSignatureEverywhere}
-                  onChange={(event) => setFillSignatureEverywhere(event.target.checked)}
-                />
-                fills the signature in all places
-              </label>
+              {signatureModalFocus === "sign" ? (
+                <label className="flex items-center gap-2 text-xs text-body">
+                  <input
+                    type="checkbox"
+                    checked={fillSignatureEverywhere}
+                    onChange={(event) => setFillSignatureEverywhere(event.target.checked)}
+                  />
+                  Fill signature in all signature fields
+                </label>
+              ) : (
+                <span className="text-xs text-muted" />
+              )}
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -1834,17 +1470,7 @@ export function SigningClient({ token }: { token: string }) {
                       font: draftFontStyle,
                     });
                   }}
-                  disabled={
-                    (requiresSignature &&
-                      draftSignatureType !== "TYPE" &&
-                      draftSignatureValue.trim().length === 0 &&
-                      draftInitialValue.trim().length === 0) ||
-                    (requiresSignature &&
-                      draftSignatureType === "TYPE" &&
-                      draftSignatureText.trim().length === 0 &&
-                      draftInitialText.trim().length === 0) ||
-                    (requiresSeal && draftSealValue.trim().length === 0)
-                  }
+                  disabled={signatureModalOkDisabled}
                   className={`${primaryButtonClass} min-w-16 justify-center`}
                 >
                   Ok

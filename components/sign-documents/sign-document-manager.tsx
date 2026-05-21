@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useDocumentFileInput } from "@/lib/client/document-file-input";
 import { Search } from "lucide-react";
 import { isSignedCopyFileName, signedCopyFileName } from "@/lib/documents/signed-copy-name";
 import { Loader2 } from "lucide-react";
@@ -11,6 +12,8 @@ import { Input } from "@/components/ui/input";
 import { appAuthHeaders, withJsonHeaders } from "@/lib/client/api";
 import { mapApiErrorMessage } from "@/lib/client/error-messages";
 import { useToast } from "@/components/ui/toast-provider";
+import { validateDocumentUploadFile } from "@/lib/client/validate-document-upload";
+import { DOCUMENT_UPLOAD_ACCEPT } from "@/lib/documents/pdf-upload-policy";
 import { uiControlClass } from "@/lib/ui/classes";
 
 type DocumentItem = {
@@ -29,7 +32,14 @@ export function SignDocumentManager({ initialDocuments }: { initialDocuments: Do
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [uploading, setUploading] = useState(false);
-  const [file, setFile] = useState<File | null>(null);
+  const {
+    inputRef,
+    inputKey,
+    selectedFile,
+    onFileChange,
+    resetInput,
+    getFileForUpload,
+  } = useDocumentFileInput();
   const [shareDocId, setShareDocId] = useState<string | null>(null);
   const [shareEmail, setShareEmail] = useState("");
   const [shareSignedOnly, setShareSignedOnly] = useState(true);
@@ -91,17 +101,42 @@ export function SignDocumentManager({ initialDocuments }: { initialDocuments: Do
   };
 
   const upload = async () => {
+    const file = getFileForUpload();
     if (!file) return;
+    const validationError = validateDocumentUploadFile(file);
+    if (validationError) {
+      pushToast(validationError, "error");
+      return;
+    }
     setUploading(true);
     try {
       const formData = new FormData();
       formData.append("file", file);
       const response = await fetch("/api/documents", { method: "POST", headers: appAuthHeaders(), body: formData });
-      const data = (await response.json()) as { error?: string };
+      const data = (await response.json()) as {
+        error?: string;
+        conversionMethod?: string;
+        conversionQualityNote?: string | null;
+        document?: { fileName: string };
+      };
       if (!response.ok) throw new Error(mapApiErrorMessage(data.error ?? "Upload failed"));
-      setFile(null);
+      resetInput();
       await refresh();
-      pushToast("Document uploaded.", "success");
+      const method = data.conversionMethod;
+      const methodNote =
+        method === "microsoft-graph"
+          ? " (Microsoft 365 / Word Online)"
+          : method === "microsoft-word"
+            ? " (Microsoft Word)"
+            : method === "libreoffice"
+              ? " (LibreOffice — layout may differ)"
+              : method === "gotenberg"
+                ? " (Gotenberg)"
+                : "";
+      pushToast(`Uploaded: ${data.document?.fileName ?? file.name}${methodNote}`, "success");
+      if (data.conversionQualityNote) {
+        pushToast(data.conversionQualityNote, "error");
+      }
     } catch (error) {
       pushToast(mapApiErrorMessage((error as Error).message), "error");
     } finally {
@@ -159,7 +194,7 @@ export function SignDocumentManager({ initialDocuments }: { initialDocuments: Do
       >
         <div className="border-b border-border bg-bg/50 px-4 py-3">
           <p className="mb-3 text-xs text-muted">
-            {filtered.length} document{filtered.length === 1 ? "" : "s"}
+            {filtered.length} document{filtered.length === 1 ? "" : "s"} — PDF or Word (.docx). PDFs unchanged; Word → PDF via LibreOffice (local) or Gotenberg/Microsoft Graph (production).
           </p>
           <div className="flex flex-col gap-3 md:flex-row md:items-center">
           <div className="relative flex-1">
@@ -178,14 +213,21 @@ export function SignDocumentManager({ initialDocuments }: { initialDocuments: Do
             />
           </div>
           <input
+            key={inputKey}
+            ref={inputRef}
             type="file"
-            accept=".pdf,.doc,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            accept={DOCUMENT_UPLOAD_ACCEPT}
+            onChange={(e) => onFileChange(e.target.files?.[0] ?? null)}
             className={`${uiControlClass} !mt-0`}
           />
-          <Button variant="primary" disabled={!file || uploading} onClick={() => void upload()}>
+          {selectedFile ? (
+            <span className="max-w-[12rem] truncate text-xs text-muted" title={selectedFile.name}>
+              {selectedFile.name}
+            </span>
+          ) : null}
+          <Button variant="primary" disabled={!selectedFile || uploading} onClick={() => void upload()}>
             {uploading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
-            {uploading ? "Uploading..." : "Upload"}
+            {uploading ? "Converting & uploading…" : "Upload"}
           </Button>
           </div>
         </div>

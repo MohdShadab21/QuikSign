@@ -46,6 +46,23 @@ export function signingFieldBadge(field: SigningFieldMeta, activeSignerEmail: st
   return "Recipient";
 }
 
+/** Label on the PDF during signing — prefers the name the sender set in field properties. */
+export function signingFieldDisplayLabel(
+  field: SigningFieldMeta & { label?: string | null; type?: string },
+  activeSignerEmail: string,
+): string {
+  const custom = field.label?.trim();
+  if (custom) {
+    return custom;
+  }
+  const type = field.type?.replaceAll("_", " ") ?? "Field";
+  const pretty = type.toLowerCase().replace(/\b\w/g, (ch) => ch.toUpperCase());
+  if (fieldBelongsToSigner(field, activeSignerEmail)) {
+    return pretty;
+  }
+  return signingFieldBadge(field, activeSignerEmail);
+}
+
 export function displayPrefillForSigner(
   field: SigningFieldMeta & { id?: string },
   activeSignerEmail: string,

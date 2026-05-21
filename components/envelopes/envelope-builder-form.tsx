@@ -17,6 +17,7 @@ import { useToast } from "@/components/ui/toast-provider";
 import { Check, ChevronDown, ChevronUp, PenLine, Send } from "lucide-react";
 import type { EnvelopeTemplatePrefill } from "@/lib/templates/template-prefill";
 import { templateRoleEmail } from "@/lib/templates/template-prefill";
+import { validateDocumentUploadFile } from "@/lib/client/validate-document-upload";
 import { builderSidePanelClass, builderSplitGridClass } from "@/lib/ui/layout";
 
 const PdfFieldDesigner = dynamic(
@@ -158,6 +159,7 @@ export function EnvelopeBuilderForm({
   const [documentOptions, setDocumentOptions] = useState<DocumentOption[]>(documents);
   const [documentSource, setDocumentSource] = useState<"select" | "upload">("select");
   const [uploadingDocument, setUploadingDocument] = useState(false);
+  const [documentUploadInputKey, setDocumentUploadInputKey] = useState(0);
   const [documentId, setDocumentId] = useState(() => templatePrefill?.documentId ?? documents[0]?.id ?? "");
   const [signers, setSigners] = useState<SignerInput[]>(() =>
     templatePrefill ? signersFromTemplatePrefill(templatePrefill) : [blankSigner()],
@@ -298,6 +300,11 @@ export function EnvelopeBuilderForm({
   const nextButtonLabel = step === 1 ? "Continue to Recipients" : step === 2 ? "Continue to Place Fields" : "Continue to Review";
 
   const uploadDocument = async (file: File) => {
+    const validationError = validateDocumentUploadFile(file);
+    if (validationError) {
+      pushToast(validationError, "error");
+      return;
+    }
     const formData = new FormData();
     formData.append("file", file);
     setUploadingDocument(true);
@@ -324,11 +331,7 @@ export function EnvelopeBuilderForm({
       if (typeof data.pageCount === "number" && data.pageCount > 0) {
         setPreviewPageCount(data.pageCount);
       }
-      if (data.conversionWarning) {
-        pushToast(data.conversionWarning, "info");
-      } else {
-        pushToast("Document uploaded and selected.", "success");
-      }
+      pushToast("Document uploaded and selected.", "success");
     } catch (error) {
       pushToast(mapApiErrorMessage((error as Error).message), "error");
     } finally {
@@ -1013,7 +1016,7 @@ export function EnvelopeBuilderForm({
         <div className="space-y-6">
           <div className="space-y-3 rounded-2xl border border-border bg-surface p-6 shadow-sm">
             <p className="text-sm font-semibold text-text">Document Source</p>
-            <p className="text-xs text-muted">Choose an existing document or upload PDF or Word (.docx, .doc).</p>
+            <p className="text-xs text-muted">Choose an existing document or upload your original PDF (unchanged — we only place signature fields on top).</p>
             <div className="inline-flex rounded-lg border border-border bg-bg p-1 text-xs">
               <button
                 type="button"
@@ -1057,21 +1060,24 @@ export function EnvelopeBuilderForm({
               </label>
             ) : (
               <label className="block text-xs text-body">
-                Upload PDF or Word
+                Upload PDF
                 <input
+                  key={documentUploadInputKey}
                   type="file"
                   accept=".pdf,.doc,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword"
                   onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (!file) return;
-                    void uploadDocument(file);
-                    event.currentTarget.value = "";
+                    const picked = event.target.files?.[0];
+                    if (!picked) return;
+                    void uploadDocument(picked);
+                    setDocumentUploadInputKey((k) => k + 1);
                   }}
                   disabled={uploadingDocument}
                   className={`${controlClass} mt-1`}
                 />
                 <span className="mt-1 block text-[11px] text-muted">
-                  {uploadingDocument ? "Uploading document..." : "Word files are converted to PDF, then selected automatically."}
+                  {uploadingDocument
+                    ? "Converting Word to PDF (may take up to a minute)..."
+                    : "PDF or Word (.docx). PDFs unchanged; Word is converted to a layout-preserving PDF (LibreOffice locally, Gotenberg/Graph in production)."}
                 </span>
               </label>
             )}

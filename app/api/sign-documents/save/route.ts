@@ -92,7 +92,6 @@ export async function POST(request: NextRequest) {
 
     const sourcePdf = await fetchCloudinaryFileBuffer(document.cloudinaryId);
     const pdf = await PDFDocument.load(sourcePdf);
-    const font = await pdf.embedFont(StandardFonts.Helvetica);
     const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
     const signatureFont = await pdf.embedFont(StandardFonts.TimesRomanItalic);
 
@@ -109,17 +108,6 @@ export async function POST(request: NextRequest) {
       const pageWidth = page.getWidth();
       const pageHeight = page.getHeight();
       const { x, y, width, height } = toPdfRect(field, pageWidth, pageHeight);
-
-      page.drawRectangle({
-        x,
-        y,
-        width,
-        height,
-        color: rgb(0.92, 0.97, 1),
-        borderColor: rgb(0.12, 0.34, 0.65),
-        borderWidth: 1,
-        opacity: 0.88,
-      });
 
       const resolvedValueType =
         field.valueType
@@ -183,25 +171,14 @@ export async function POST(request: NextRequest) {
           color: rgb(0.09, 0.2, 0.38),
         });
       }
-      if (field.label?.trim()) {
-        page.drawText(field.label.trim(), {
-          x: x + 4,
-          y: Math.min(y + height - 8, textY + fontSize + 1),
-          size: 6.5,
-          font,
-          color: rgb(0.25, 0.35, 0.48),
-        });
-      }
-      page.drawText("SIGNED", {
-        x: x + 4,
-        y: y + 4,
-        size: 7,
-        font,
-        color: rgb(0.25, 0.35, 0.48),
-      });
     }
 
-    const signedBuffer = Buffer.from(await pdf.save());
+    const signedBuffer = Buffer.from(
+      await pdf.save({
+        useObjectStreams: false,
+        addDefaultPage: false,
+      }),
+    );
     const signedName = document.fileName.toLowerCase().endsWith(".pdf")
       ? `${document.fileName.slice(0, -4)}-signed.pdf`
       : `${document.fileName}-signed.pdf`;

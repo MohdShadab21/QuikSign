@@ -6,7 +6,7 @@ import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 import { buildDefaultField, fieldFactoryDefaults } from "@/components/envelopes/field-factory";
-import { isSenderLockedField, signingFieldBadge } from "@/lib/signing/field-access";
+import { isSenderLockedField, signingFieldDisplayLabel } from "@/lib/signing/field-access";
 import {
   FIELD_MIN_HEIGHT_PERCENT,
   FIELD_MIN_WIDTH_PERCENT,
@@ -255,8 +255,59 @@ export function PdfFieldDesigner({
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [selectedFieldIndexes, setSelectedFieldIndexes] = useState<number[]>([]);
   const canvasRef = useRef<HTMLDivElement | null>(null);
-  const pageSurfaceRef = useRef<HTMLDivElement | null>(null);
+  const pageSurfaceRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const suppressClickRef = useRef(false);
+
+  const safePage = Math.max(1, Math.min(placementPage, numPages));
+
+  const setPageSurfaceRef = useCallback((pageNumber: number, element: HTMLDivElement | null) => {
+    if (element) {
+      pageSurfaceRefs.current.set(pageNumber, element);
+    } else {
+      pageSurfaceRefs.current.delete(pageNumber);
+    }
+  }, []);
+
+  const resolvePageAtClient = useCallback(
+    (clientX: number, clientY: number): number => {
+      for (let pageNumber = 1; pageNumber <= numPages; pageNumber += 1) {
+        const el = pageSurfaceRefs.current.get(pageNumber);
+        if (!el) continue;
+        const rect = el.getBoundingClientRect();
+        if (
+          clientX >= rect.left &&
+          clientX <= rect.right &&
+          clientY >= rect.top &&
+          clientY <= rect.bottom
+        ) {
+          return pageNumber;
+        }
+      }
+      let bestPage = 1;
+      let bestDistance = Number.POSITIVE_INFINITY;
+      for (let pageNumber = 1; pageNumber <= numPages; pageNumber += 1) {
+        const el = pageSurfaceRefs.current.get(pageNumber);
+        if (!el) continue;
+        const rect = el.getBoundingClientRect();
+        const centerY = rect.top + rect.height / 2;
+        const distance = Math.abs(clientY - centerY);
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          bestPage = pageNumber;
+        }
+      }
+      return bestPage;
+    },
+    [numPages],
+  );
+
+  const syncActivePage = useCallback(
+    (pageNumber: number) => {
+      const next = Math.max(1, Math.min(pageNumber, numPages));
+      onPlacementPageChange?.(next);
+    },
+    [numPages, onPlacementPageChange],
+  );
 
   useLayoutEffect(() => {
     const el = canvasRef.current;
@@ -275,21 +326,19 @@ export function PdfFieldDesigner({
     return () => ro.disconnect();
   }, [documentUrl]);
 
-  const getPageCoords = useCallback((clientX: number, clientY: number) => {
-    const pageEl = pageSurfaceRef.current ?? canvasRef.current;
-    if (!pageEl) {
-      return { x: 0, y: 0, width: 1, height: 1 };
-    }
-    const rect = pageEl.getBoundingClientRect();
-    const { x, y } = pointerToPagePercent(pageEl, clientX, clientY);
-    return { x, y, width: rect.width, height: rect.height };
-  }, []);
-
-  const safePage = Math.max(1, Math.min(placementPage, numPages));
-  const goToPage = (nextPage: number) => {
-    if (!onPlacementPageChange) return;
-    onPlacementPageChange(Math.max(1, Math.min(numPages, nextPage)));
-  };
+  const getPageCoords = useCallback(
+    (clientX: number, clientY: number, pageHint?: number) => {
+      const pageNumber = pageHint ?? resolvePageAtClient(clientX, clientY);
+      const pageEl = pageSurfaceRefs.current.get(pageNumber) ?? canvasRef.current;
+      if (!pageEl) {
+        return { x: 0, y: 0, width: 1, height: 1, page: pageNumber };
+      }
+      const rect = pageEl.getBoundingClientRect();
+      const { x, y } = pointerToPagePercent(pageEl, clientX, clientY);
+      return { x, y, width: rect.width, height: rect.height, page: pageNumber };
+    },
+    [resolvePageAtClient],
+  );
 
   const stableRequestHeaders = useStableHttpHeaders(documentRequestHeaders);
 
@@ -310,9 +359,19 @@ export function PdfFieldDesigner({
   }, []);
 
   useEffect(() => {
-    // Ensure the top of the PDF is visible when page/doc changes.
     scrollCanvasToTop();
-  }, [documentUrl, safePage, scrollCanvasToTop]);
+  }, [documentUrl, scrollCanvasToTop]);
+
+  useEffect(() => {
+    const pageNumber = Math.max(1, Math.min(placementPage, numPages));
+    const pageEl = pageSurfaceRefs.current.get(pageNumber);
+    if (!pageEl) {
+      return;
+    }
+    requestAnimationFrame(() => {
+      pageEl.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+    });
+  }, [placementPage, numPages, documentUrl]);
 
   // Keep wheel/trackpad scroll inside the PDF pane instead of scrolling the whole page.
   useEffect(() => {
@@ -337,26 +396,31 @@ export function PdfFieldDesigner({
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
-  }, [documentUrl, safePage]);
+  }, [documentUrl]);
 
-  const pageFields = useMemo(
-    () =>
-      fields
-        .map((field, index) => ({ field, index }))
-        .filter((entry) => entry.field.page === safePage),
-    [fields, safePage],
+  const fieldsWithIndex = useMemo(
+    () => fields.map((field, index) => ({ field, index })),
+    [fields],
   );
-  const sortedPageFields = useMemo(
-    () =>
-      [...pageFields].sort(
-        (a, b) => (a.field.zIndex ?? 1) - (b.field.zIndex ?? 1) || a.index - b.index,
-      ),
-    [pageFields],
-  );
+
+  const fieldsByPage = useMemo(() => {
+    const map = new Map<number, Array<{ field: DesignerField; index: number }>>();
+    for (const entry of fieldsWithIndex) {
+      const pageNumber = entry.field.page;
+      const bucket = map.get(pageNumber) ?? [];
+      bucket.push(entry);
+      map.set(pageNumber, bucket);
+    }
+    for (const [pageNumber, bucket] of map) {
+      bucket.sort((a, b) => (a.field.zIndex ?? 1) - (b.field.zIndex ?? 1) || a.index - b.index);
+      map.set(pageNumber, bucket);
+    }
+    return map;
+  }, [fieldsWithIndex]);
 
   const selectedOnPage = useMemo(
-    () => pageFields.find((entry) => selectedFieldIndexes.includes(entry.index)) ?? null,
-    [pageFields, selectedFieldIndexes],
+    () => fieldsWithIndex.find((entry) => selectedFieldIndexes.includes(entry.index)) ?? null,
+    [fieldsWithIndex, selectedFieldIndexes],
   );
 
   useEffect(() => {
@@ -391,8 +455,8 @@ export function PdfFieldDesigner({
       }
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "d" && selectedFieldIndexes.length > 0) {
         event.preventDefault();
-        const selectedPageFields = sortedPageFields.filter((entry) => selectedFieldIndexes.includes(entry.index));
-        for (const selected of selectedPageFields) {
+        const selectedEntries = fieldsWithIndex.filter((entry) => selectedFieldIndexes.includes(entry.index));
+        for (const selected of selectedEntries) {
           onAddField({
             ...selected.field,
             x: Number(clamp(selected.field.x + 2, 0, 100 - selected.field.width).toFixed(2)),
@@ -407,7 +471,7 @@ export function PdfFieldDesigner({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onAddField, onDeleteField, onUndo, readOnly, selectedFieldIndexes, sortedPageFields]);
+  }, [fieldsWithIndex, onAddField, onDeleteField, onUndo, readOnly, selectedFieldIndexes]);
 
   const onCanvasClick = (event: React.MouseEvent<HTMLDivElement>) => {
     if (suppressClickRef.current) {
@@ -418,14 +482,24 @@ export function PdfFieldDesigner({
       setSelectedFieldIndexes([]);
       return;
     }
-    if (enableClickToPlace && selectedSignerEmail && (pageSurfaceRef.current || canvasRef.current)) {
-      const { x: rawX, y: rawY } = getPageCoords(event.clientX, event.clientY);
+    if (enableClickToPlace && selectedSignerEmail && pageSurfaceRefs.current.size > 0) {
+      const { x: rawX, y: rawY, page } = getPageCoords(event.clientX, event.clientY);
+      syncActivePage(page);
       const width = fieldFactoryDefaults.width;
       const height = fieldFactoryDefaults.height;
       const x = Number(clamp(rawX - width / 2, 0, 100 - width).toFixed(2));
       const y = Number(clamp(rawY - height / 2, 0, 100 - height).toFixed(2));
       const maxZ = fields.reduce((currentMax, entry) => Math.max(currentMax, entry.zIndex ?? 1), 1);
-      onAddField(buildDefaultField({ type: selectedFieldType, signerEmail: selectedSignerEmail, page: safePage, x, y, zIndex: maxZ + 1 }));
+      onAddField(
+        buildDefaultField({
+          type: selectedFieldType,
+          signerEmail: selectedSignerEmail,
+          page,
+          x,
+          y,
+          zIndex: maxZ + 1,
+        }),
+      );
       return;
     }
     setSelectedFieldIndexes([]);
@@ -436,7 +510,7 @@ export function PdfFieldDesigner({
     if (readOnly) {
       return;
     }
-    if (!selectedSignerEmail || !(pageSurfaceRef.current || canvasRef.current)) {
+    if (!selectedSignerEmail || pageSurfaceRefs.current.size === 0) {
       return;
     }
     const draggedType = event.dataTransfer.getData("application/x-quiksign-field-type") as DesignerField["type"];
@@ -444,7 +518,8 @@ export function PdfFieldDesigner({
     if (!draggedType) {
       return;
     }
-    const { x: rawX, y: rawY } = getPageCoords(event.clientX, event.clientY);
+    const { x: rawX, y: rawY, page: targetPage } = getPageCoords(event.clientX, event.clientY);
+    syncActivePage(targetPage);
     let x = Number(clamp(rawX, 0, 100).toFixed(2));
     let y = Number(clamp(rawY, 0, 100).toFixed(2));
     const maxZ = fields.reduce((currentMax, entry) => Math.max(currentMax, entry.zIndex ?? 1), 1);
@@ -452,7 +527,7 @@ export function PdfFieldDesigner({
     const defaultHeight = fieldFactoryDefaults.height;
     const isOverlapping = (candidateX: number, candidateY: number) =>
       fields.some((entry) => {
-        if (entry.page !== safePage) {
+        if (entry.page !== targetPage) {
           return false;
         }
         const entryRight = entry.x + entry.width;
@@ -470,7 +545,7 @@ export function PdfFieldDesigner({
     const created: DesignerField = buildDefaultField({
       type: draggedType,
       signerEmail: selectedSignerEmail,
-      page: safePage,
+      page: targetPage,
       x,
       y,
       zIndex: maxZ + 1,
@@ -480,10 +555,14 @@ export function PdfFieldDesigner({
   };
 
   const applyDragAt = useCallback((clientX: number, clientY: number) => {
-    if (!dragState || !(pageSurfaceRef.current || canvasRef.current)) {
+    if (!dragState) {
       return;
     }
-    const pageEl = pageSurfaceRef.current ?? canvasRef.current!;
+    const pageEl =
+      pageSurfaceRefs.current.get(dragState.startField.page) ?? canvasRef.current;
+    if (!pageEl) {
+      return;
+    }
     const rect = pageEl.getBoundingClientRect();
     const deltaXPercent = ((clientX - dragState.startClientX) / rect.width) * 100;
     const deltaYPercent = ((clientY - dragState.startClientY) / rect.height) * 100;
@@ -733,77 +812,16 @@ export function PdfFieldDesigner({
           </button>
         </div>
       ) : null}
-      {onPlacementPageChange && readOnly ? (
-        <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
-          <div className="inline-flex items-center gap-1 rounded-lg border border-border bg-bg px-1 py-0.5 shadow-sm">
-            <button
-              type="button"
-              onClick={() => goToPage(safePage - 1)}
-              disabled={safePage <= 1}
-              className="rounded px-2 py-1 font-medium text-text hover:bg-surface disabled:opacity-40"
-              aria-label="Previous page"
-            >
-              Prev
-            </button>
-            <label className="inline-flex items-center gap-1 px-1 text-[11px] text-body">
-              Page
-              <select
-                value={safePage}
-                onChange={(event) => goToPage(Number(event.target.value))}
-                className="rounded border border-border bg-surface px-1.5 py-0.5 text-text"
-                aria-label="Go to page"
-              >
-                {Array.from({ length: numPages }, (_, index) => index + 1).map((pageNumber) => (
-                  <option key={pageNumber} value={pageNumber}>
-                    {pageNumber}
-                  </option>
-                ))}
-              </select>
-              <span>of {numPages}</span>
-            </label>
-            <button
-              type="button"
-              onClick={() => goToPage(safePage + 1)}
-              disabled={safePage >= numPages}
-              className="rounded px-2 py-1 font-medium text-text hover:bg-surface disabled:opacity-40"
-              aria-label="Next page"
-            >
-              Next
-            </button>
-          </div>
-          <span className="text-[11px] text-muted">Tap a field below or pick a page to find your signature.</span>
-        </div>
-      ) : null}
       {!minimalViewerChrome ? (
       <div className="flex flex-col gap-2 text-xs sm:flex-row sm:flex-wrap sm:items-center">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex items-center gap-1 rounded-lg border border-border bg-bg px-1 py-0.5 shadow-sm">
-            <button
-              type="button"
-              onClick={() => goToPage(safePage - 1)}
-              disabled={!onPlacementPageChange || safePage <= 1}
-              className="rounded px-2 py-1 font-medium disabled:opacity-40"
-              aria-label="Previous page"
-            >
-              Prev
-            </button>
-            <span className="min-w-[4.5rem] px-1 text-center text-[11px] font-medium text-text">
-              {safePage} / {numPages}
-            </span>
-            <button
-              type="button"
-              onClick={() => goToPage(safePage + 1)}
-              disabled={!onPlacementPageChange || safePage >= numPages}
-              className="rounded px-2 py-1 font-medium disabled:opacity-40"
-              aria-label="Next page"
-            >
-              Next
-            </button>
-          </div>
-          <span className="rounded-md border border-border bg-surface px-2 py-1 text-[11px] text-body">
-            {numPages} page{numPages === 1 ? "" : "s"}
-          </span>
-        </div>
+        <p className="text-[11px] text-body">
+          Scroll to view the full document ({numPages} page{numPages === 1 ? "" : "s"}). Click on a page to place fields.
+          {readOnly ? " Tap a field in the list to jump to it." : null}
+        </p>
+        <span className="rounded-md border border-border bg-surface px-2 py-1 text-[11px] text-body sm:ml-auto">
+          Active: page {safePage}
+        </span>
+        <div className="flex flex-wrap items-center gap-2 sm:w-full">
         {!readOnly ? (
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -819,15 +837,16 @@ export function PdfFieldDesigner({
             <button
               type="button"
               onClick={() => {
-                if (!pageFields.length) {
+                const countOnPage = (fieldsByPage.get(safePage) ?? []).length;
+                if (countOnPage === 0) {
                   return;
                 }
-                const confirmed = window.confirm(`Clear ${pageFields.length} field(s) from page ${safePage}?`);
+                const confirmed = window.confirm(`Clear ${countOnPage} field(s) from page ${safePage}?`);
                 if (confirmed) {
                   onClearPage(safePage);
                 }
               }}
-              disabled={pageFields.length === 0}
+              disabled={(fieldsByPage.get(safePage) ?? []).length === 0}
               className="rounded-md border border-rose-400/70 px-2 py-1 text-rose-600 disabled:opacity-50"
             >
               Clear page
@@ -914,19 +933,15 @@ export function PdfFieldDesigner({
         {readOnly ? (
           <span className="text-[11px] text-muted">Preview only</span>
         ) : null}
+        </div>
       </div>
       ) : null}
         </div>
       </section>
 
-      {/* PDF: flows with page on small screens; capped inner scroll from lg up */}
       <section
         aria-label="Document preview"
-        className={clsx(
-          "min-w-0 shrink-0 rounded-lg border border-border bg-bg",
-          "max-lg:overflow-visible",
-          "lg:h-[min(56dvh,520px)] lg:min-h-[220px] lg:max-h-[calc(100dvh-11rem)] lg:overflow-hidden",
-        )}
+        className="min-w-0 shrink-0 rounded-lg border border-border bg-bg"
       >
         <div
           ref={canvasRef}
@@ -936,36 +951,44 @@ export function PdfFieldDesigner({
           onMouseMove={onCanvasMouseMove}
           onMouseUp={onCanvasMouseUp}
           onMouseLeave={onCanvasMouseUp}
-          className={clsx(
-            "w-full max-w-full bg-bg",
-            "max-lg:overflow-x-auto max-lg:overflow-y-visible",
-            "lg:h-full lg:overflow-x-auto lg:overflow-y-auto lg:overscroll-contain",
-          )}
+          className="max-h-[min(85dvh,920px)] w-full max-w-full overflow-x-auto overflow-y-auto overscroll-contain bg-bg"
           style={{ WebkitOverflowScrolling: "touch", overscrollBehavior: "contain" }}
         >
         {!documentUrl ? (
           <p className="p-3 text-xs opacity-70">Select a document and provide external auth headers to load PDF preview.</p>
         ) : (
-          <div ref={pageSurfaceRef} className="relative mx-auto min-w-0 max-w-full">
-            <Document
-              file={documentFile}
-              onLoadSuccess={(result) => {
-                setNumPages(result.numPages);
-                onPageBounds?.(result.numPages);
-                scrollCanvasToTop();
-              }}
-              onLoadError={() => {
-                onDocumentAccessError?.();
-              }}
-              onSourceError={() => {
-                onDocumentAccessError?.();
-              }}
-              loading={minimalViewerChrome ? null : <p className="p-3 text-xs">Loading PDF...</p>}
-              error={<p className="p-3 text-xs text-rose-500">Unable to render PDF preview.</p>}
-            >
-              <Page pageNumber={safePage} width={renderWidth} />
-            </Document>
-            {sortedPageFields.map(({ field, index }) => {
+          <Document
+            file={documentFile}
+            onLoadSuccess={(result) => {
+              setNumPages(result.numPages);
+              onPageBounds?.(result.numPages);
+              scrollCanvasToTop();
+            }}
+            onLoadError={() => {
+              onDocumentAccessError?.();
+            }}
+            onSourceError={() => {
+              onDocumentAccessError?.();
+            }}
+            loading={minimalViewerChrome ? null : <p className="p-3 text-xs">Loading PDF...</p>}
+            error={<p className="p-3 text-xs text-rose-500">Unable to render PDF preview.</p>}
+          >
+            {Array.from({ length: numPages }, (_, pageIndex) => {
+              const pageNumber = pageIndex + 1;
+              const pageFields = fieldsByPage.get(pageNumber) ?? [];
+              return (
+                <div
+                  key={`pdf-page-${pageNumber}`}
+                  ref={(element) => setPageSurfaceRef(pageNumber, element)}
+                  className="relative mx-auto mb-6 min-w-0 max-w-full shadow-sm last:mb-2"
+                  data-page={pageNumber}
+                  onMouseDown={() => syncActivePage(pageNumber)}
+                >
+                  <p className="pointer-events-none absolute left-2 top-2 z-10 rounded bg-surface/90 px-2 py-0.5 text-[10px] font-medium text-muted">
+                    Page {pageNumber}
+                  </p>
+                  <Page pageNumber={pageNumber} width={renderWidth} />
+                  {pageFields.map(({ field, index }) => {
               const senderOnSend = isSenderPlacementField(field, prefillEditingMode);
               const widgetType = resolveValueType(field);
               const sigDisplay =
@@ -1152,7 +1175,7 @@ export function PdfFieldDesigner({
               </div>
             );
             })}
-            {sortedPageFields.map(({ field, index }) => (
+                  {pageFields.map(({ field, index }) => (
               <div
                 key={`label-${index}-${field.signerEmail}`}
                 onMouseDown={(event) => onFieldDragStart(event, index, field, "move")}
@@ -1170,13 +1193,13 @@ export function PdfFieldDesigner({
                 title={field.signerEmail}
               >
                 {signingViewEmail
-                  ? signingFieldBadge(field, signingViewEmail)
+                  ? signingFieldDisplayLabel(field, signingViewEmail)
                   : fieldLabelMode === "clean"
                     ? field.label?.trim() || field.type.replaceAll("_", " ").toLowerCase().replace(/\b\w/g, (ch) => ch.toUpperCase())
                     : `${field.label?.trim() || field.type} · ${field.signerEmail}`}
               </div>
             ))}
-            {selectedOnPage ? (
+                  {selectedOnPage && selectedOnPage.field.page === pageNumber ? (
               <>
                 <div
                   className="pointer-events-none absolute border-t border-dashed border-primary/60"
@@ -1196,7 +1219,7 @@ export function PdfFieldDesigner({
                 />
               </>
             ) : null}
-            {sortedPageFields.map(({ field, index }) => (
+                  {pageFields.map(({ field, index }) => (
               <button
                 key={`resize-${index}-${field.signerEmail}`}
                 type="button"
@@ -1215,7 +1238,10 @@ export function PdfFieldDesigner({
                 }}
               />
             ))}
-          </div>
+                </div>
+              );
+            })}
+          </Document>
         )}
         </div>
       </section>

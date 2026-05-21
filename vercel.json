@@ -4,7 +4,7 @@
   "installCommand": "npm install --include=optional",
   "framework": "nextjs",
   "functions": {
-    "app/api/documents/route.ts": { "maxDuration": 60, "memory": 1024 },
+    "app/api/documents/route.ts": { "maxDuration": 120, "memory": 1024 },
     "app/api/envelopes/route.ts": { "maxDuration": 60, "memory": 1024 },
     "app/api/envelopes/[id]/packet/route.ts": { "maxDuration": 60, "memory": 1024 },
     "app/api/sign/route.ts": { "maxDuration": 60, "memory": 1024 },

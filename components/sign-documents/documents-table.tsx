@@ -124,7 +124,7 @@ export function DocumentsTable({ rows, onShare, onDelete }: DocumentsTableProps)
   if (rows.length === 0) {
     return (
       <div className="px-4 py-12 text-center text-sm text-body">
-        No documents yet. Upload a PDF or Word file above to get started.
+        No documents yet. Upload a PDF above to get started.
       </div>
     );
   }

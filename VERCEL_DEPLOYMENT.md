@@ -45,7 +45,7 @@ Do **not** commit `.env` to Git. Production secrets live only in Vercel.
 | **SMTP** | Send signing invites and completion emails (Gmail, Outlook, SendGrid, etc.) |
 | **Vercel account** | Hosting |
 
-**Not available on Vercel:** LibreOffice (`soffice`). Word `.docx` uploads use a text-only fallback; legacy `.doc` is rejected. For exact Word layout, upload **PDF** files.
+**Word on Vercel:** Install a hosted converter — set `GOTENBERG_URL` (recommended) or Microsoft Graph (`MS_GRAPH_*`). See `docs/WORD_TO_PDF_PRODUCTION.md`. PDF uploads are unchanged; Word is converted to PDF before signing.
 
 ---
 

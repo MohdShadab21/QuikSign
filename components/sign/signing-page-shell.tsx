@@ -31,7 +31,7 @@ export function SigningPageShell({ children }: { children: ReactNode }) {
         </div>
       </header>
       <main className={pageMainClass}>
-        <div className="mx-auto w-full min-w-0 max-w-5xl">{children}</div>
+        <div className="mx-auto w-full min-w-0 max-w-6xl">{children}</div>
       </main>
     </div>
   );
